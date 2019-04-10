@@ -96,5 +96,5 @@ fun testParse(input: String){
     println("input: $input")
     val parser = Parser(Lexer(input))
     print("output: ")
-    println(Pretty.prettyPrint(parser.parseExpression()))
+    println(parser.parseExpression().pretty())
 }

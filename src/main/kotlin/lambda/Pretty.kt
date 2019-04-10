@@ -1,8 +1,8 @@
 package lambda
 
-object Pretty{
+private object Pretty{
 
-    private fun prettyPrintInner(expr: Expression, depth: Int): String {
+    fun prettyPrintInner(expr: Expression, depth: Int): String {
         return when(expr){
             is Var -> expr.ident.ident
             is Lamdba -> "(\\${expr.binder.ident}.${prettyPrintInner(expr.body,0)})"
@@ -13,5 +13,5 @@ object Pretty{
         }
     }
 
-    fun prettyPrint(expr: Expression) = prettyPrintInner(expr, 0)
 }
+fun Expression.pretty() = Pretty.prettyPrintInner(this, 0)

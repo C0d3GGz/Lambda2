@@ -37,7 +37,7 @@ class EvalKtTest {
         val replacement_ = Parser(Lexer(replacement)).parseExpression()
         val expr_ = Parser(Lexer(expr)).parseExpression()
         val expected_= Parser(Lexer(expected)).parseExpression()
-        assertEquals(expected_, Eval.substitute(scrutinee_, replacement_, expr_))
+        assertEquals(expected_, Eval().substitute(scrutinee_, replacement_, expr_))
     }
 
     @Test

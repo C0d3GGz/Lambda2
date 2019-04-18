@@ -82,7 +82,7 @@ class Parser(tokens: Iterator<Token>){
 }
 
 fun main(args: Array<String>) {
-    testParse("\\x.x y z")
+/*    testParse("\\x.x y z")
     testParse("\\x.x (y z)")
     testParse("x (y z)")
     testParse("(x y) z")
@@ -90,11 +90,19 @@ fun main(args: Array<String>) {
     testParse("(\\x.x) y")
 //    testParse("\\x.((x y z)")
 
+*/
+
+
+    testParse("(\\x. x) y")
+    testParse("(\\x. x y)")
+    testParse("(\\y. \\x. x y) x")
+    testParse("(\\y. \\x. x y) z (\\k. k)")
 }
 
 fun testParse(input: String){
     println("input: $input")
     val parser = Parser(Lexer(input))
-    print("output: ")
-    println(parser.parseExpression().pretty())
+    print("evaled: ")
+    val parsed = parser.parseExpression()
+    println(Eval().eval(parsed).pretty())
 }

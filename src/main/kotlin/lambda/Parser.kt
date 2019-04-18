@@ -18,7 +18,7 @@ class Parser(tokens: Iterator<Token>){
         return Var(ident)
     }
 
-    fun parseLambda() : Lamdba {
+    fun parseLambda() : Lambda {
 
         expectNext(::getLam) {
             token -> "expected lambda saw $token"
@@ -34,7 +34,7 @@ class Parser(tokens: Iterator<Token>){
 
         val body = parseExpression()
 
-        return Lamdba(binder, body)
+        return Lambda(binder, body)
     }
 
 

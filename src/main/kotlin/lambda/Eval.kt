@@ -8,15 +8,15 @@ class Eval {
     fun substitute(scrutinee: Ident, replacement: Expression, expr: Expression): Expression {
         return when (expr) {
             is Var -> if (expr.ident == scrutinee) replacement else expr
-            is Lamdba ->
+            is Lambda ->
                 when {
                     expr.binder == scrutinee -> expr
                     replacement.freeVars().contains(expr.binder) -> {
                         val freshBinder = freshName(expr.binder)
                         val renamedBody = substitute(expr.binder, Var(freshBinder), expr.body)
-                        Lamdba(freshBinder, substitute(scrutinee, replacement, renamedBody))
+                        Lambda(freshBinder, substitute(scrutinee, replacement, renamedBody))
                     }
-                    else -> Lamdba(expr.binder, substitute(scrutinee, replacement, expr.body))
+                    else -> Lambda(expr.binder, substitute(scrutinee, replacement, expr.body))
                 }
             is App -> App(substitute(scrutinee, replacement, expr.func), substitute(scrutinee, replacement, expr.arg))
         }
@@ -30,7 +30,7 @@ class Eval {
     fun eval(expr: Expression): Expression {
         return when(expr) {
             is App -> when (val evaledFunc = eval(expr.func)) {
-                is Lamdba -> {
+                is Lambda -> {
                     eval(substitute(evaledFunc.binder, eval(expr.arg), evaledFunc.body))
                 }
                 else -> App(evaledFunc, expr.arg)
@@ -43,7 +43,7 @@ class Eval {
 fun Expression.freeVars(): Set<Ident> {
     return when (this) {
         is Var -> hashSetOf(ident)
-        is Lamdba -> body.freeVars().filter { it != binder }.toSet()
+        is Lambda -> body.freeVars().filter { it != binder }.toSet()
         is App -> func.freeVars().union(arg.freeVars())
     }
 }

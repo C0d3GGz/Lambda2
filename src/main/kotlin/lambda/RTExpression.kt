@@ -20,15 +20,35 @@ fun fromExpr(expr: Expression): RTExpression {
     }
 }
 
-fun eval(ctx: Context, expr: RTExpression): RTExpression  {
-    return when(expr) {
+fun matchIntLiteral(expr: RTExpression): Int {
+    if (expr is RTLiteral && expr.lit is IntLit) {
+        return expr.lit.int
+    } else {
+        throw EvalException("$expr is not an Int")
+    }
+}
+
+fun eval(ctx: Context, expr: RTExpression): RTExpression {
+    return when (expr) {
         is RTLiteral -> expr
         is RTVar -> {
-            val res = ctx.get(expr.ident)
-            if (res == null) {
-                throw EvalException("${expr.ident} was undefined.")
-            } else {
-                return res
+            when (expr.ident) {
+                Ident("#add") -> {
+                    RTLiteral(
+                        IntLit(
+                            matchIntLiteral(ctx.get(Ident("x"))!!)
+                                    + matchIntLiteral(ctx.get(Ident("y"))!!)
+                        )
+                    )
+                }
+                else -> {
+                    val res = ctx.get(expr.ident)
+                    if (res == null) {
+                        throw EvalException("${expr.ident} was undefined.")
+                    } else {
+                        return res
+                    }
+                }
             }
         }
         is RTLambda -> RTClosure(expr.binder, expr.body, ctx)
@@ -48,9 +68,17 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression  {
 }
 
 fun evalExpr(expr: Expression): RTExpression {
-    val initialContext: Context = HashMap()
+    val primAdd: RTExpression =
+        RTClosure(
+            Ident("x"),
+            RTLambda(
+                Ident("y"),
+                RTVar(Ident("#add"))
+            ),
+            hashMapOf()
+        )
+    val initialContext: Context = hashMapOf(Ident("add") to primAdd)
     return eval(initialContext, fromExpr(expr))
 }
-class EvalException(s: String) : Exception(s) {
 
-}
+class EvalException(s: String) : Exception(s) {}

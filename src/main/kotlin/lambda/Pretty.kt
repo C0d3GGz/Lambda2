@@ -2,8 +2,15 @@ package lambda
 
 private object Pretty{
 
+    fun prettyPrintLiteral(lit: Lit): String {
+        return when (lit) {
+            is IntLit -> lit.int.toString()
+        }
+    }
+
     fun prettyPrintExpr(expr: Expression, depth: Int): String {
         return when(expr){
+            is Literal -> prettyPrintLiteral(expr.lit)
             is Var -> expr.ident.ident
             is Lambda -> "(\\${expr.binder.ident}.${prettyPrintExpr(expr.body,0)})"
             is App -> {
@@ -15,6 +22,7 @@ private object Pretty{
 
     fun prettyPrintRTExpr(expr: RTExpression, depth: Int): String {
         return when(expr){
+            is RTLiteral -> prettyPrintLiteral(expr.lit)
             is RTVar -> expr.ident.ident
             is RTLambda -> "(\\${expr.binder.ident}.${prettyPrintRTExpr(expr.body,0)})"
             is RTClosure -> "(\\${expr.binder.ident}.${prettyPrintRTExpr(expr.body,0)})"

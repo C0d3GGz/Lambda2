@@ -2,6 +2,7 @@ package lambda
 
 import lambda.Token.Companion.getDot
 import lambda.Token.Companion.getIdent
+import lambda.Token.Companion.getIntToken
 import lambda.Token.Companion.getLam
 import lambda.Token.Companion.getRParen
 import java.lang.RuntimeException
@@ -16,6 +17,13 @@ class Parser(tokens: Iterator<Token>){
             token -> "expected identifier saw $token"
         }
         return Var(ident)
+    }
+
+    fun parseInt() : Literal {
+        val intToken = expectNext(::getIntToken) {
+            token -> "expected int literal saw $token"
+        }
+        return Literal(IntLit(intToken.int))
     }
 
     fun parseLambda() : Lambda {
@@ -66,6 +74,7 @@ class Parser(tokens: Iterator<Token>){
             }
             is Lam -> parseLambda()
             is Ident -> parseVar()
+            is IntToken -> parseInt()
             else -> null
         }
     }

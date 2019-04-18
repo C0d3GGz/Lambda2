@@ -37,6 +37,12 @@ sealed class Token{
             }
         }
 
+        fun getIntToken(token: Token): IntToken?{
+            return when(token){
+                is IntToken -> token
+                else -> null
+            }
+        }
     }
 }
 object LParen : Token()
@@ -44,6 +50,7 @@ object RParen : Token()
 object Lam : Token()
 object Dot : Token()
 data class Ident(val ident: String): Token()
+data class IntToken(val int: Int): Token()
 
 class Lexer(input: String): Iterator<Token> {
 
@@ -61,11 +68,20 @@ class Lexer(input: String): Iterator<Token> {
             '.' -> Dot
             else -> {
                 if(c.isJavaIdentifierStart()) ident(c)
+                else if (c.isDigit()) intLiteral(c)
                 else throw RuntimeException()
             }
         }.also {
             consumeWhitespace()
         }
+    }
+
+    private fun intLiteral(startChar: Char): Token {
+        var result: String = startChar.toString()
+        while (iterator.hasNext() && iterator.peek().isDigit()){
+            result += iterator.next()
+        }
+        return IntToken(result.toInt())
     }
 
     private fun consumeWhitespace(){

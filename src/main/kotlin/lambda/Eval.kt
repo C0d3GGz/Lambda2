@@ -7,6 +7,7 @@ class Eval {
     // substitute(s, r, e) = [s -> r] e
     fun substitute(scrutinee: Ident, replacement: Expression, expr: Expression): Expression {
         return when (expr) {
+            is Literal -> expr
             is Var -> if (expr.ident == scrutinee) replacement else expr
             is Lambda ->
                 when {
@@ -42,6 +43,7 @@ class Eval {
 
 fun Expression.freeVars(): Set<Ident> {
     return when (this) {
+        is Literal -> emptySet()
         is Var -> hashSetOf(ident)
         is Lambda -> body.freeVars().filter { it != binder }.toSet()
         is App -> func.freeVars().union(arg.freeVars())

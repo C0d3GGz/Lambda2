@@ -20,6 +20,14 @@ fun fromExpr(expr: Expression): RTExpression {
     }
 }
 
+// (\x. x 1 2) : ?
+// (\f. \g. f g) : ?
+// (\x. x) (\y. y) 1 : ?
+// (\x. x) 1 : ?
+// (\f. add 1 (f 3)) : ?
+// (\f. f (add 1) 1) : ?
+// (\f. \g. g (f 1) 1) : ?
+
 fun matchIntLiteral(expr: RTExpression): Int {
     if (expr is RTLiteral && expr.lit is IntLit) {
         return expr.lit.int

@@ -29,6 +29,7 @@ fun matchIntLiteral(expr: RTExpression): Int {
 }
 
 fun eval(ctx: Context, expr: RTExpression): RTExpression {
+    println("Evaling: ${ctx.pretty()} ${expr.pretty()}")
     return when (expr) {
         is RTLiteral -> expr
         is RTVar -> {

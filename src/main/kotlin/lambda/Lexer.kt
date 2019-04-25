@@ -43,6 +43,12 @@ sealed class Token{
                 else -> null
             }
         }
+        fun getBoolToken(token: Token): BoolToken?{
+            return when(token){
+                is BoolToken -> token
+                else -> null
+            }
+        }
     }
 }
 object LParen : Token()
@@ -51,6 +57,7 @@ object Lam : Token()
 object Dot : Token()
 data class Ident(val ident: String): Token()
 data class IntToken(val int: Int): Token()
+data class BoolToken(val bool: Boolean): Token()
 
 class Lexer(input: String): Iterator<Token> {
 
@@ -95,7 +102,12 @@ class Lexer(input: String): Iterator<Token> {
         while (iterator.hasNext() && iterator.peek().isJavaIdentifierPart()){
             result += iterator.next()
         }
-        return Ident(result)
+
+        return when (result) {
+            "true" -> BoolToken(true)
+            "false" -> BoolToken(false)
+            else -> Ident(result)
+        }
     }
 }
 

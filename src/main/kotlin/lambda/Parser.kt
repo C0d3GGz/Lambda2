@@ -1,5 +1,6 @@
 package lambda
 
+import lambda.Token.Companion.getBoolToken
 import lambda.Token.Companion.getDot
 import lambda.Token.Companion.getIdent
 import lambda.Token.Companion.getIntToken
@@ -25,6 +26,14 @@ class Parser(tokens: Iterator<Token>){
         }
         return Literal(IntLit(intToken.int))
     }
+
+    fun parseBool() : Literal {
+        val boolToken = expectNext(::getBoolToken) {
+                token -> "expected boolean literal saw $token"
+        }
+        return Literal(BoolLit(boolToken.bool))
+    }
+
 
     fun parseLambda() : Lambda {
 
@@ -75,6 +84,7 @@ class Parser(tokens: Iterator<Token>){
             is Lam -> parseLambda()
             is Ident -> parseVar()
             is IntToken -> parseInt()
+            is BoolToken -> parseBool()
             else -> null
         }
     }

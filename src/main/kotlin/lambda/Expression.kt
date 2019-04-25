@@ -2,6 +2,7 @@ package lambda
 
 sealed class Lit
 data class IntLit(val int: Int): Lit()
+data class BoolLit(val bool: Boolean): Lit()
 
 sealed class Expression
 data class Literal(val lit: Lit) : Expression()

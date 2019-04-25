@@ -5,6 +5,7 @@ private object Pretty{
     fun prettyPrintLiteral(lit: Lit): String {
         return when (lit) {
             is IntLit -> lit.int.toString()
+            is BoolLit -> lit.bool.toString()
         }
     }
 

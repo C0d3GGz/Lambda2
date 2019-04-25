@@ -60,8 +60,10 @@ data class IntToken(val int: Int): Token()
 data class BoolToken(val bool: Boolean): Token()
 
 class Lexer(input: String): Iterator<Token> {
-
     var iterator = PeekableIterator(input.iterator())
+    init {
+        consumeWhitespace()
+    }
 
     override fun hasNext(): Boolean {
         return iterator.hasNext()

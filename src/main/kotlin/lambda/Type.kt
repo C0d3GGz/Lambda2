@@ -1,8 +1,8 @@
 package lambda
 
 sealed class Type {
-    data class Int(val lit: Lit) : Type()
-    data class Bool(val lit: Lit) : Type()
+    object Int : Type()
+    object Bool : Type()
     data class Var(val ident: Ident): Type()
     data class Fun(val arg: Type, val result: Type) : Type()
 }

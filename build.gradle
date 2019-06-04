@@ -16,6 +16,7 @@ dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     compile group: 'junit', name: 'junit', version: '4.12'
     compile 'com.tylerthrailkill.helpers:pretty-print:2.0.0'
+    compile 'io.vavr:vavr-kotlin:0.10.0'
 
 }
 

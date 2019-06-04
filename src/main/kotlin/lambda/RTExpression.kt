@@ -1,6 +1,8 @@
 package lambda
 
 import java.lang.Exception
+import io.vavr.collection.HashMap
+import io.vavr.kotlin.*
 
 typealias Context = HashMap<Ident, RTExpression>
 
@@ -45,18 +47,14 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 Ident("#add") -> {
                     RTLiteral(
                         IntLit(
-                            matchIntLiteral(ctx.get(Ident("x"))!!)
-                                    + matchIntLiteral(ctx.get(Ident("y"))!!)
+                            matchIntLiteral(ctx.get(Ident("x")).get())
+                                    + matchIntLiteral(ctx.get(Ident("y")).get())
                         )
                     )
                 }
                 else -> {
                     val res = ctx.get(expr.ident)
-                    if (res == null) {
-                        throw EvalException("${expr.ident} was undefined.")
-                    } else {
-                        return res
-                    }
+                    return res.getOrElseThrow { EvalException("${expr.ident} was undefined.") }
                 }
             }
         }
@@ -66,8 +64,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
             when (val evaledClosure = eval(ctx, expr.func)) {
                 is RTClosure -> {
                     val evaledArg = eval(ctx, expr.arg)
-                    val tmpCtx: Context = HashMap(evaledClosure.context)
-                    tmpCtx.put(evaledClosure.binder, evaledArg)
+                    val tmpCtx = evaledClosure.context.put(evaledClosure.binder, evaledArg)
                     eval(tmpCtx, evaledClosure.body)
                 }
                 else -> throw EvalException("${evaledClosure} is not a function.")
@@ -84,9 +81,9 @@ fun evalExpr(expr: Expression): RTExpression {
                 Ident("y"),
                 RTVar(Ident("#add"))
             ),
-            hashMapOf()
+            hashMap()
         )
-    val initialContext: Context = hashMapOf(Ident("add") to primAdd)
+    val initialContext: Context = hashMap(Ident("add") to primAdd)
     return eval(initialContext, fromExpr(expr))
 }
 

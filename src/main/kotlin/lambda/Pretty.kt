@@ -1,5 +1,7 @@
 package lambda
 
+import io.vavr.kotlin.*
+
 private object Pretty{
 
     fun prettyPrintLiteral(lit: Lit): String {

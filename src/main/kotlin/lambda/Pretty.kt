@@ -15,7 +15,7 @@ private object Pretty{
         return when(expr){
             is Literal -> prettyPrintLiteral(expr.lit)
             is Var -> expr.ident.ident
-            is Lambda -> "(\\${expr.binder.ident}.${prettyPrintExpr(expr.body,0)})"
+            is Lambda -> "(\\${expr.binder.ident}. ${prettyPrintExpr(expr.body,0)})"
             is App -> {
                 val output = "${prettyPrintExpr(expr.func, depth)} ${prettyPrintExpr(expr.arg, depth + 1)}"
                 return if(depth > 0) "($output)" else output
@@ -39,12 +39,25 @@ private object Pretty{
         return when(expr){
             is RTLiteral -> prettyPrintLiteral(expr.lit)
             is RTVar -> expr.ident.ident
-            is RTLambda -> "(\\${expr.binder.ident}.${prettyPrintRTExpr(expr.body,0)})"
+            is RTLambda -> "(\\${expr.binder.ident}. ${prettyPrintRTExpr(expr.body,0)})"
             is RTClosure -> {
-                "(\\${expr.binder.ident}.${prettyPrintRTExpr(expr.body,0)})"
+                "(\\${expr.binder.ident}. ${prettyPrintRTExpr(expr.body,0)})"
             }
             is RTApp -> {
                 val output = "${prettyPrintRTExpr(expr.func, depth)} ${prettyPrintRTExpr(expr.arg, depth + 1)}"
+                return if(depth > 0) "($output)" else output
+            }
+        }
+    }
+
+    fun prettyPrintType(type: Type, depth: Int): String {
+        return when(type){
+            Type.Int -> "Int"
+            Type.Bool -> "Bool"
+            is Type.Var -> type.ident.ident
+            is Type.Fun ->
+            {
+                val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"
                 return if(depth > 0) "($output)" else output
             }
         }
@@ -54,3 +67,4 @@ private object Pretty{
 fun Expression.pretty() = Pretty.prettyPrintExpr(this, 0)
 fun RTExpression.pretty() = Pretty.prettyPrintRTExpr(this, 0)
 fun Context.pretty() = Pretty.prettyContext(this)
+fun Type.pretty() = Pretty.prettyPrintType(this, 0)

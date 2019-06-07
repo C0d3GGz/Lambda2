@@ -7,6 +7,9 @@ fun runFile(file: File) {
     file.readText().split(";").filter { it.isNotBlank() }.forEach {
             try {
                 val expr = Parser(Lexer(it)).parseExpression()
+                println("Typechecking: ${expr.pretty()}")
+                val ty = Typechecker().inferExpr(expr)
+                println("Inferred: ${ty.pretty()}")
                 println("Evaluating: ${expr.pretty()}")
                 val result = evalExpr(expr)
                 println(result.pretty())

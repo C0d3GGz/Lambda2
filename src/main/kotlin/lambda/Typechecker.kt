@@ -6,11 +6,11 @@ import io.vavr.kotlin.hashMap
 
 typealias TCContext = HashMap<Ident, Scheme>
 
-class Substitution(val subst: HashMap<Ident, Type>) {
+data class Substitution(val subst: HashMap<Ident, Type>) {
     fun get(ident: Ident): Option<Type> = subst.get(ident)
 
-    fun compose(other: Substitution): Substitution {
-        TODO()
+    fun compose(that: Substitution): Substitution {
+        return Substitution(that.subst.mapValues(::apply).merge(subst))
     }
 
     fun apply(type: Type): Type {
@@ -22,6 +22,9 @@ class Substitution(val subst: HashMap<Ident, Type>) {
         }
     }
 
+    companion object {
+        val empty = Substitution(hashMap())
+    }
 }
 
 private val initialContext: TCContext = hashMap(

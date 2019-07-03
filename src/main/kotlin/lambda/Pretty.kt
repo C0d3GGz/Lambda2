@@ -63,8 +63,14 @@ private object Pretty{
         }
     }
 
+    fun prettyPrintScheme(scheme: Scheme): String {
+        return if (scheme.vars.isEmpty()) scheme.ty.pretty()
+        else "forall ${scheme.vars.map(Ident::ident).joinToString(" ")}. ${scheme.ty.pretty()}"
+    }
+
 }
 fun Expression.pretty() = Pretty.prettyPrintExpr(this, 0)
 fun RTExpression.pretty() = Pretty.prettyPrintRTExpr(this, 0)
 fun Context.pretty() = Pretty.prettyContext(this)
 fun Type.pretty() = Pretty.prettyPrintType(this, 0)
+fun Scheme.pretty() = Pretty.prettyPrintScheme(this)

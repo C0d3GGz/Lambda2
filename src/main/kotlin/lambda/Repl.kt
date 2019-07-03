@@ -8,8 +8,12 @@ fun runFile(file: File) {
             try {
                 val expr = Parser(Lexer(it)).parseExpression()
                 println("Typechecking: ${expr.pretty()}")
-                val ty = Typechecker().inferExpr(expr)
-                println("Inferred: ${ty.pretty()}")
+                try {
+                    val ty = Typechecker().inferExpr(expr)
+                    println("Inferred: ${ty.pretty()}")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 println("Evaluating: ${expr.pretty()}")
                 val result = evalExpr(expr)
                 println(result.pretty())

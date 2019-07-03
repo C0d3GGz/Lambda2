@@ -22,4 +22,7 @@ sealed class Type {
     }
 }
 
-data class Scheme(val vars: List<Ident>, val ty: Type)
+data class Scheme(val vars: List<Ident>, val ty: Type) {
+
+    fun freeVars(): HashSet<Ident> = ty.freeVars().removeAll(vars)
+}

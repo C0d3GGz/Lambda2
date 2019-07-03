@@ -3,6 +3,7 @@ package lambda
 import io.vavr.collection.HashMap
 import io.vavr.control.Option
 import io.vavr.kotlin.hashMap
+import io.vavr.kotlin.hashSet
 
 typealias TCContext = HashMap<Ident, Scheme>
 
@@ -20,6 +21,15 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
             is Type.Var -> get(type.ident).getOrElse(type)
             is Type.Fun -> Type.Fun(apply(type.arg), apply(type.result))
         }
+    }
+
+    fun apply(scheme: Scheme): Scheme {
+        val tmpS = Substitution(this.subst.removeAll(scheme.vars))
+        return Scheme(scheme.vars, tmpS.apply(scheme.ty))
+    }
+
+    fun apply(ctx: TCContext): TCContext {
+        return ctx.mapValues(::apply)
     }
 
     companion object {
@@ -52,7 +62,8 @@ private fun varBind(v: Type.Var, type: Type): Substitution {
 }
 
 private val initialContext: TCContext = hashMap(
-    Ident("add") to Scheme(emptyList(), Type.Fun(Type.Int, Type.Fun(Type.Int, Type.Int)))
+    Ident("add") to Scheme(emptyList(), Type.Fun(Type.Int, Type.Fun(Type.Int, Type.Int))),
+    Ident("identity") to Scheme(listOf(Ident("a")), Type.Fun(Type.v("a"), Type.v("a"))) // forall a. a -> a
 )
 
 class Typechecker {
@@ -64,23 +75,56 @@ class Typechecker {
         return Type.Var(Ident("u${fresh.toString()}"))
     }
 
-    fun infer(ctx: TCContext, expr: Expression): Type {
+    fun instantiate(scheme: Scheme): Type {
+        val x = scheme.vars.map { it to freshVar() }.toTypedArray()
+        val s = Substitution(hashMap(*x))
+
+        return s.apply(scheme.ty)
+    }
+
+    fun generalize(type: Type, ctx: TCContext): Scheme { // TODO clean up names
+        val freeInCtx = ctx.values().map(Scheme::freeVars).foldLeft(hashSet<Ident>(), { a, b -> b.union(a) })
+        val freeVars = type.freeVars().removeAll(freeInCtx)
+        /*val vars = ('a'..'z').take(freeVars.size()).map { Ident(it.toString()) } */
+
+        return Scheme(freeVars.toJavaList(), type)
+    }
+
+    fun infer(ctx: TCContext, expr: Expression): Pair<Type, Substitution> {
         return when (expr) {
             is Literal -> {
-                return when (expr.lit) {
+                val t = when (expr.lit) {
                     is IntLit -> Type.Int
                     is BoolLit -> Type.Bool
                 }
+
+                t to Substitution.empty
             }
             is Lambda -> {
                 val tyBinder = freshVar()
                 val tmpCtx = ctx.put(expr.binder, Scheme(emptyList(), tyBinder))
-                val tyBody = this.infer(tmpCtx, expr.body)
-                return Type.Fun(tyBinder, tyBody)
+                val (tyBody, s) = this.infer(tmpCtx, expr.body)
+                Type.Fun(s.apply(tyBinder), tyBody) to s
             }
-            else -> throw Exception("Unmatched typechecker case")
+            is Var -> {
+                val scheme = ctx.get(expr.ident)
+                if (scheme.isDefined) instantiate(scheme.get()) to Substitution.empty else throw RuntimeException("")
+            }
+            is App -> {
+                val tyRes = freshVar()
+                val (tyFun, s1) = infer(ctx, expr.func)
+                val (tyArg, s2) = infer(s1.apply(ctx), expr.arg)
+
+                val s3 = unify(s2.apply(tyFun), Type.Fun(tyArg, tyRes))
+                val s = s1.compose(s2).compose(s3)
+
+                s.apply(tyRes) to s
+            }
         }
     }
 
-    fun inferExpr(expr: Expression) = this.infer(initialContext, expr)
+    fun inferExpr(expr: Expression): Scheme {
+        val (t, s) = this.infer(initialContext, expr)
+        return generalize(s.apply(t), initialContext)
+    }
 }

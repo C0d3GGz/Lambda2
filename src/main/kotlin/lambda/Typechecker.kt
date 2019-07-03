@@ -27,6 +27,30 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
     }
 }
 
+fun unify(t1: Type, t2: Type): Substitution {
+    return if (t1 == t2)
+        Substitution.empty
+    else if (t1 is Type.Var)
+        varBind(t1, t2)
+    else if (t2 is Type.Var)
+        varBind(t2, t1)
+    else if (t1 is Type.Fun && t2 is Type.Fun) {
+        val s1 = unify(t1.arg, t2.arg)
+        val s2 = unify(s1.apply(t1.result), s1.apply(t2.result))
+
+        s1.compose(s2)
+    }
+    else
+        throw RuntimeException("failed to unify ${t1.pretty()} with ${t2.pretty()}")
+}
+
+private fun varBind(v: Type.Var, type: Type): Substitution {
+    return if (type.freeVars().contains(v.ident))
+        throw RuntimeException("failed to infer the infinite type ${v.ident.ident} ~ ${type.pretty()}")
+    else
+        Substitution(hashMap(v.ident to type))
+}
+
 private val initialContext: TCContext = hashMap(
     Ident("add") to Scheme(emptyList(), Type.Fun(Type.Int, Type.Fun(Type.Int, Type.Int)))
 )

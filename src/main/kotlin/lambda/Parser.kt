@@ -13,29 +13,29 @@ class Parser(tokens: Iterator<Token>){
 
     val iterator = PeekableIterator(tokens)
 
-    fun parseVar(): Var {
+    fun parseVar(): Expression.Var {
         val ident = expectNext(::getIdent) {
             token -> "expected identifier saw $token"
         }
-        return Var(ident)
+        return Expression.Var(ident)
     }
 
-    fun parseInt() : Literal {
+    fun parseInt() : Expression.Literal {
         val intToken = expectNext(::getIntToken) {
             token -> "expected int literal saw $token"
         }
-        return Literal(IntLit(intToken.int))
+        return Expression.Literal(IntLit(intToken.int))
     }
 
-    fun parseBool() : Literal {
+    fun parseBool() : Expression.Literal {
         val boolToken = expectNext(::getBoolToken) {
                 token -> "expected boolean literal saw $token"
         }
-        return Literal(BoolLit(boolToken.bool))
+        return Expression.Literal(BoolLit(boolToken.bool))
     }
 
 
-    fun parseLambda() : Lambda {
+    fun parseLambda() : Expression.Lambda {
 
         expectNext(::getLam) {
             token -> "expected lambda saw $token"
@@ -51,7 +51,7 @@ class Parser(tokens: Iterator<Token>){
 
         val body = parseExpression()
 
-        return Lambda(binder, body)
+        return Expression.Lambda(binder, body)
     }
 
 
@@ -66,7 +66,7 @@ class Parser(tokens: Iterator<Token>){
         return when {
             atoms.isEmpty() -> throw RuntimeException("failed to parse expression")
             atoms.size == 1 -> atoms.first()
-            else -> atoms.drop(1).fold(atoms[0], ::App)
+            else -> atoms.drop(1).fold(atoms[0], Expression::App)
         }
 
     }

@@ -92,7 +92,7 @@ class Typechecker {
 
     fun infer(ctx: TCContext, expr: Expression): Pair<Type, Substitution> {
         return when (expr) {
-            is Literal -> {
+            is Expression.Literal -> {
                 val t = when (expr.lit) {
                     is IntLit -> Type.Int
                     is BoolLit -> Type.Bool
@@ -100,17 +100,17 @@ class Typechecker {
 
                 t to Substitution.empty
             }
-            is Lambda -> {
+            is Expression.Lambda -> {
                 val tyBinder = freshVar()
                 val tmpCtx = ctx.put(expr.binder, Scheme(emptyList(), tyBinder))
                 val (tyBody, s) = this.infer(tmpCtx, expr.body)
                 Type.Fun(s.apply(tyBinder), tyBody) to s
             }
-            is Var -> {
+            is Expression.Var -> {
                 val scheme = ctx.get(expr.ident)
                 if (scheme.isDefined) instantiate(scheme.get()) to Substitution.empty else throw RuntimeException("")
             }
-            is App -> {
+            is Expression.App -> {
                 val tyRes = freshVar()
                 val (tyFun, s1) = infer(ctx, expr.func)
                 val (tyArg, s2) = infer(s1.apply(ctx), expr.arg)

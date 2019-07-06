@@ -6,19 +6,20 @@ import io.vavr.kotlin.*
 
 typealias Context = HashMap<Ident, RTExpression>
 
-sealed class RTExpression
-data class RTLiteral(val lit: Lit) : RTExpression()
-data class RTVar(val ident: Ident) : RTExpression()
-data class RTLambda(val binder: Ident, val body: RTExpression) : RTExpression()
-data class RTClosure(val binder: Ident, val body: RTExpression, val context: Context) : RTExpression()
-data class RTApp(val func: RTExpression, val arg: RTExpression) : RTExpression()
+sealed class RTExpression {
+    data class Literal(val lit: Lit) : RTExpression()
+    data class Var(val ident: Ident) : RTExpression()
+    data class Lambda(val binder: Ident, val body: RTExpression) : RTExpression()
+    data class Closure(val binder: Ident, val body: RTExpression, val context: Context) : RTExpression()
+    data class App(val func: RTExpression, val arg: RTExpression) : RTExpression()
+}
 
 fun fromExpr(expr: Expression): RTExpression {
     return when (expr) {
-        is Literal -> RTLiteral(expr.lit)
-        is Var -> RTVar(expr.ident)
-        is Lambda -> RTLambda(expr.binder, fromExpr(expr.body))
-        is App -> RTApp(fromExpr(expr.func), fromExpr(expr.arg))
+        is Expression.Literal -> RTExpression.Literal(expr.lit)
+        is Expression.Var -> RTExpression.Var(expr.ident)
+        is Expression.Lambda -> RTExpression.Lambda(expr.binder, fromExpr(expr.body))
+        is Expression.App -> RTExpression.App(fromExpr(expr.func), fromExpr(expr.arg))
     }
 }
 
@@ -31,7 +32,7 @@ fun fromExpr(expr: Expression): RTExpression {
 // (\f. \g. g (f 1) 1) : ?
 
 fun matchIntLiteral(expr: RTExpression): Int {
-    if (expr is RTLiteral && expr.lit is IntLit) {
+    if (expr is RTExpression.Literal && expr.lit is IntLit) {
         return expr.lit.int
     } else {
         throw EvalException("$expr is not an Int")
@@ -41,11 +42,11 @@ fun matchIntLiteral(expr: RTExpression): Int {
 fun eval(ctx: Context, expr: RTExpression): RTExpression {
     println("Evaling: ${ctx.pretty()} ${expr.pretty()}")
     return when (expr) {
-        is RTLiteral -> expr
-        is RTVar -> {
+        is RTExpression.Literal -> expr
+        is RTExpression.Var -> {
             when (expr.ident) {
                 Ident("#add") -> {
-                    RTLiteral(
+                    RTExpression.Literal(
                         IntLit(
                             matchIntLiteral(ctx.get(Ident("x")).get())
                                     + matchIntLiteral(ctx.get(Ident("y")).get())
@@ -58,11 +59,11 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 }
             }
         }
-        is RTLambda -> RTClosure(expr.binder, expr.body, ctx)
-        is RTClosure -> expr
-        is RTApp -> {
+        is RTExpression.Lambda -> RTExpression.Closure(expr.binder, expr.body, ctx)
+        is RTExpression.Closure -> expr
+        is RTExpression.App -> {
             when (val evaledClosure = eval(ctx, expr.func)) {
-                is RTClosure -> {
+                is RTExpression.Closure -> {
                     val evaledArg = eval(ctx, expr.arg)
                     val tmpCtx = evaledClosure.context.put(evaledClosure.binder, evaledArg)
                     eval(tmpCtx, evaledClosure.body)
@@ -75,11 +76,11 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
 
 fun evalExpr(expr: Expression): RTExpression {
     val primAdd: RTExpression =
-        RTClosure(
+        RTExpression.Closure(
             Ident("x"),
-            RTLambda(
+            RTExpression.Lambda(
                 Ident("y"),
-                RTVar(Ident("#add"))
+                RTExpression.Var(Ident("#add"))
             ),
             hashMap()
         )

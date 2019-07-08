@@ -32,6 +32,17 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
         return ctx.mapValues(::apply)
     }
 
+    fun apply(expr: Expression): Expression {
+        return when(expr){
+            is Expression.Literal, is Expression.Var  -> expr
+            is Expression.Lambda -> Expression.Lambda(expr.binder, apply(expr.body))
+            is Expression.App -> Expression.App(apply(expr.func), apply(expr.arg))
+            is Expression.Typed -> apply(expr)
+        }
+    }
+
+    fun apply(expr: Expression.Typed): Expression.Typed = Expression.Typed(apply(expr.expr), apply(expr.type))
+
     companion object {
         val empty = Substitution(hashMap())
     }
@@ -48,7 +59,7 @@ fun unify(t1: Type, t2: Type): Substitution {
         val s1 = unify(t1.arg, t2.arg)
         val s2 = unify(s1.apply(t1.result), s1.apply(t2.result))
 
-        s1.compose(s2)
+        s2.compose(s1)
     } else
         throw RuntimeException("failed to unify ${t1.pretty()} with ${t2.pretty()}")
 }
@@ -89,7 +100,7 @@ class Typechecker {
         return Scheme(freeVars.toJavaList(), type)
     }
 
-    fun infer(ctx: TCContext, expr: Expression): Pair<Type, Substitution> {
+    fun infer(ctx: TCContext, expr: Expression): Pair<Expression.Typed, Substitution> {
         return when (expr) {
             is Expression.Literal -> {
                 val t = when (expr.lit) {
@@ -97,41 +108,46 @@ class Typechecker {
                     is BoolLit -> Type.Bool
                 }
 
-                t to Substitution.empty
+                Expression.Typed(expr, t) to Substitution.empty
             }
             is Expression.Lambda -> {
                 val tyBinder = freshVar()
                 val tmpCtx = ctx.put(expr.binder, Scheme(emptyList(), tyBinder))
-                val (tyBody, s) = this.infer(tmpCtx, expr.body)
-                Type.Fun(s.apply(tyBinder), tyBody) to s
+                val (body, s) = this.infer(tmpCtx, expr.body)
+                s.apply(Expression.Typed(Expression.Lambda(expr.binder, body), Type.Fun(tyBinder, body.type))) to s
             }
             is Expression.Var -> {
                 val scheme = ctx.get(expr.ident)
-                if (scheme.isDefined) instantiate(scheme.get()) to Substitution.empty else throw RuntimeException("")
+                if (scheme.isDefined) {
+                    val t = instantiate(scheme.get())
+                    Expression.Typed(expr, t) to Substitution.empty
+                }
+                else throw RuntimeException("")
             }
             is Expression.App -> {
                 val tyRes = freshVar()
-                val (tyFun, s1) = infer(ctx, expr.func)
-                val (tyArg, s2) = infer(s1.apply(ctx), expr.arg)
+                val (func, s1) = infer(ctx, expr.func)
+                val (arg, s2) = infer(s1.apply(ctx), expr.arg)
 
-                val s3 = unify(s2.apply(tyFun), Type.Fun(tyArg, tyRes))
-                val s = s1.compose(s2).compose(s3)
+                val s3 = unify(s2.apply(func.type), Type.Fun(arg.type, tyRes))
+                val s = s3.compose(s2).compose(s1)
 
-                s.apply(tyRes) to s
+                s.apply(Expression.Typed(Expression.App(func, arg), tyRes)) to s
             }
             is Expression.Typed -> {
                 val (tyExpr, s) = infer(ctx, expr.expr)
                 if (!expr.type.freeVars().isEmpty) {
                     throw RuntimeException("not allowed")
                 }
-                unify(tyExpr, expr.type)
-                tyExpr to s
+                val s2 = unify(tyExpr.type, expr.type)
+                s2.apply(tyExpr) to s2.compose(s)
             }
         }
     }
 
     fun inferExpr(expr: Expression): Scheme {
         val (t, s) = this.infer(initialContext, expr)
-        return generalize(s.apply(t), initialContext)
+        println("inferred AST: ${t.pretty()}")
+        return generalize(s.apply(t.type), initialContext)
     }
 }

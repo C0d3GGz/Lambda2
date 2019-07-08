@@ -49,8 +49,7 @@ fun unify(t1: Type, t2: Type): Substitution {
         val s2 = unify(s1.apply(t1.result), s1.apply(t2.result))
 
         s1.compose(s2)
-    }
-    else
+    } else
         throw RuntimeException("failed to unify ${t1.pretty()} with ${t2.pretty()}")
 }
 
@@ -119,6 +118,14 @@ class Typechecker {
                 val s = s1.compose(s2).compose(s3)
 
                 s.apply(tyRes) to s
+            }
+            is Expression.Typed -> {
+                val (tyExpr, s) = infer(ctx, expr.expr)
+                if (!expr.type.freeVars().isEmpty) {
+                    throw RuntimeException("not allowed")
+                }
+                unify(tyExpr, expr.type)
+                tyExpr to s
             }
         }
     }

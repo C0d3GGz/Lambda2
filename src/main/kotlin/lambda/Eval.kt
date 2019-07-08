@@ -24,6 +24,7 @@ class Eval {
                     substitute(scrutinee, replacement, expr.func),
                     substitute(scrutinee, replacement, expr.arg)
                 )
+            is Expression.Typed -> Expression.Typed(substitute(scrutinee, replacement, expr.expr), expr.type)
         }
     }
 
@@ -51,5 +52,6 @@ fun Expression.freeVars(): Set<Ident> {
         is Expression.Var -> hashSetOf(ident)
         is Expression.Lambda -> body.freeVars().filter { it != binder }.toSet()
         is Expression.App -> func.freeVars().union(arg.freeVars())
+        is Expression.Typed -> expr.freeVars()
     }
 }

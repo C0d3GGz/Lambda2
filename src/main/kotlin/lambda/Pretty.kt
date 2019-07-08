@@ -20,6 +20,7 @@ private object Pretty{
                 val output = "${prettyPrintExpr(expr.func, depth)} ${prettyPrintExpr(expr.arg, depth + 1)}"
                 return if(depth > 0) "($output)" else output
             }
+            is Expression.Typed -> "(${expr.expr.pretty()} : ${expr.type.pretty()})"
         }
     }
 

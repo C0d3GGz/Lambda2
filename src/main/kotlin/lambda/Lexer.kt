@@ -55,6 +55,8 @@ object LParen : Token()
 object RParen : Token()
 object Lam : Token()
 object Dot : Token()
+object Colon : Token()
+object Arrow : Token()
 data class Ident(val ident: String): Token()
 data class IntToken(val int: Int): Token()
 data class BoolToken(val bool: Boolean): Token()
@@ -75,6 +77,8 @@ class Lexer(input: String): Iterator<Token> {
             ')' -> RParen
             '\\' -> Lam
             '.' -> Dot
+            ':' -> Colon
+            '-' -> if(iterator.next() == '>') Arrow else { throw RuntimeException() }
             else -> {
                 if(c.isJavaIdentifierStart()) ident(c)
                 else if (c.isDigit()) intLiteral(c)

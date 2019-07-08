@@ -20,6 +20,7 @@ fun fromExpr(expr: Expression): RTExpression {
         is Expression.Var -> RTExpression.Var(expr.ident)
         is Expression.Lambda -> RTExpression.Lambda(expr.binder, fromExpr(expr.body))
         is Expression.App -> RTExpression.App(fromExpr(expr.func), fromExpr(expr.arg))
+        is Expression.Typed -> fromExpr(expr.expr)
     }
 }
 

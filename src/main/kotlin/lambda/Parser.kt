@@ -13,6 +13,42 @@ class Parser(tokens: Iterator<Token>){
 
     val iterator = PeekableIterator(tokens)
 
+    fun parseType(): Type {
+        val ty = parseTypeAtom()
+        return when(iterator.peek()) {
+            is Arrow -> {
+                iterator.next()
+                Type.Fun(ty, parseType())
+            }
+            else -> ty
+        }
+    }
+
+    fun parseTypeAtom(): Type {
+        return when(val t = iterator.peek()) {
+            is LParen -> {
+                iterator.next()
+                parseType().also {
+                    expectNext(::getRParen) { token ->
+                        "missing closing paren saw $token"
+                    }
+                }
+            }
+            is Ident -> {
+                val ident = expectNext(::getIdent) {
+                    token -> "expected identifier saw $token"
+                }
+                return when(ident.ident){
+                    "Int" -> Type.Int
+                    "Bool" -> Type.Bool
+                    else -> Type.Var(ident)
+                }
+
+            }
+            else -> throw RuntimeException("expected type found $t")
+        }
+    }
+
     fun parseVar(): Expression.Var {
         val ident = expectNext(::getIdent) {
             token -> "expected identifier saw $token"
@@ -75,11 +111,16 @@ class Parser(tokens: Iterator<Token>){
         return when(iterator.peek()) {
             is LParen -> {
                 iterator.next()
-                parseExpression().also {
-                    expectNext(::getRParen){ token ->
-                        "missing closing paren saw $token"
-                    }
+                var expr = parseExpression()
+                if(iterator.peek() == Colon){
+                    iterator.next()
+                    val ty = parseType()
+                    expr = Expression.Typed(expr, ty)
                 }
+                expectNext(::getRParen){ token ->
+                    "missing closing paren saw $token"
+                }
+                expr
             }
             is Lam -> parseLambda()
             is Ident -> parseVar()

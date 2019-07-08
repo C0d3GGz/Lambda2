@@ -56,11 +56,11 @@ private object Pretty{
             Type.Int -> "Int"
             Type.Bool -> "Bool"
             is Type.Var -> type.ident.ident
-            is Type.Fun ->
-            {
+            is Type.Fun -> {
                 val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"
                 return if(depth > 0) "($output)" else output
             }
+            Type.ErrorSentinel -> "ERR"
         }
     }
 

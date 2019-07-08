@@ -9,6 +9,13 @@ import kotlin.RuntimeException
 
 class UnificationTest {
 
+    private fun unify(ty1: Type, ty2: Type): Substitution {
+        val typechecker = Typechecker()
+        return typechecker.unify(ty1, ty2).fold({
+            throw RuntimeException(it.pretty())
+        }, { it })
+    }
+
     @Test
     fun `int unifies with int`() {
         assertEquals(Substitution.empty, unify(Type.Int, Type.Int))

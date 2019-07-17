@@ -19,7 +19,7 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
         return when (type) {
             Type.Int, Type.Bool, Type.ErrorSentinel -> type
             is Type.Var -> get(type.ident).getOrElse(type)
-            is Type.Fun -> Type.Fun(apply(type.arg), apply(type.result))
+            is Type.Fun -> Type.Fun(apply(type.arg, ::apply), apply(type.result, ::apply))
         }
     }
 
@@ -35,13 +35,19 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
     fun apply(expr: Expression): Expression {
         return when (expr) {
             is Expression.Literal, is Expression.Var -> expr
-            is Expression.Lambda -> Expression.Lambda(expr.binder, apply(expr.body))
-            is Expression.App -> Expression.App(apply(expr.func), apply(expr.arg))
+            is Expression.Lambda -> Expression.Lambda(expr.binder, apply(expr.body, ::apply))
+            is Expression.App -> Expression.App(apply(expr.func, ::apply), apply(expr.arg, ::apply))
             is Expression.Typed -> apply(expr)
         }
     }
 
-    fun apply(expr: Expression.Typed): Expression.Typed = Expression.Typed(apply(expr.expr), apply(expr.type))
+    fun <T> apply(type: Spanned<T>, f: (T) -> T): Spanned<T> {
+        val (span, ty) = type
+        return Spanned(span, f(ty))
+    }
+
+    fun apply(expr: Expression.Typed): Expression.Typed =
+        Expression.Typed(apply(expr.expr, ::apply), apply(expr.type, ::apply))
 
     companion object {
         val empty = Substitution(hashMap())
@@ -62,8 +68,14 @@ sealed class TypeError {
 }
 
 private val initialContext: TCContext = hashMap(
-    Ident("add") to Scheme(emptyList(), Type.Fun(Type.Int, Type.Fun(Type.Int, Type.Int))),
-    Ident("identity") to Scheme(listOf(Ident("a")), Type.Fun(Type.v("a"), Type.v("a"))) // forall a. a -> a
+    Ident("add") to Scheme(
+        emptyList(),
+        Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
+    ),
+    Ident("identity") to Scheme(
+        listOf(Ident("a")),
+        Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan())
+    ) // forall a. a -> a
 )
 
 class Typechecker {
@@ -95,7 +107,10 @@ class Typechecker {
         return Scheme(freeVars.toJavaList(), type)
     }
 
-    fun unify(t1: Type, t2: Type): Either<TypeError, Substitution> {
+    fun unify(st1: Spanned<Type>, st2: Spanned<Type>): Either<TypeError, Substitution> {
+        val t1 = st1.value
+        val t2 = st2.value
+
         return if (t1 == t2)
             Either.right(Substitution.empty)
         else if (t1 is Type.Var)
@@ -104,7 +119,7 @@ class Typechecker {
             varBind(t2, t1)
         else if (t1 is Type.Fun && t2 is Type.Fun) {
             unify(t1.arg, t2.arg).flatMap { s1 ->
-                unify(s1.apply(t1.result), s1.apply(t2.result)).map { s2 ->
+                unify(s1.apply(t1.result, s1::apply), s1.apply(t2.result, s1::apply)).map { s2 ->
                     s2.compose(s1)
                 }
             }
@@ -120,7 +135,10 @@ class Typechecker {
             Either.right(Substitution(hashMap(v.ident to type)))
     }
 
-    fun infer(ctx: TCContext, expr: Expression): Pair<Expression.Typed, Substitution> {
+    fun infer(ctx: TCContext, sexpr: Spanned<Expression>): Pair<Spanned<Expression.Typed>, Substitution> {
+        val (span, expr) = sexpr
+        val errorSentinel = Type.ErrorSentinel.withDummySpan()
+
         return when (expr) {
             is Expression.Literal -> {
                 val t = when (expr.lit) {
@@ -128,76 +146,90 @@ class Typechecker {
                     is BoolLit -> Type.Bool
                 }
 
-                Expression.Typed(expr, t) to Substitution.empty
+                Expression.Typed(sexpr, t.withDummySpan()).withSpan(span) to Substitution.empty
             }
             is Expression.Lambda -> {
                 val tyBinder = freshVar()
-                val tmpCtx = ctx.put(expr.binder, Scheme(emptyList(), tyBinder))
+                val tmpCtx = ctx.put(expr.binder.value, Scheme(emptyList(), tyBinder))
                 val (body, s) = this.infer(tmpCtx, expr.body)
-                if (body.type.isError()) {
-                    Expression.Typed(Expression.Lambda(expr.binder, body), Type.ErrorSentinel) to Substitution.empty
+                if (body.value.type.value.isError()) {
+                    Expression.Typed(
+                        Expression.Lambda(expr.binder, body).withSpan(span),
+                        errorSentinel
+                    ).withSpan(span) to Substitution.empty
                 } else
-                    s.apply(Expression.Typed(Expression.Lambda(expr.binder, body), Type.Fun(tyBinder, body.type))) to s
+                    s.apply(
+                        Expression.Typed(
+                            Expression.Lambda(expr.binder, body).withSpan(span),
+                            Type.Fun(tyBinder.withDummySpan(), body.value.type).withDummySpan()
+                        )
+                    ).withSpan(span) to s
             }
             is Expression.Var -> {
                 val scheme = ctx.get(expr.ident)
                 if (scheme.isDefined) {
-                    val t = instantiate(scheme.get())
-                    Expression.Typed(expr, t) to Substitution.empty
+                    val t = instantiate(scheme.get()).withDummySpan()
+                    Expression.Typed(sexpr, t).withSpan(span) to Substitution.empty
                 } else {
                     reportError(TypeError.UnknownVar(expr.ident))
-                    Expression.Typed(expr, Type.ErrorSentinel) to Substitution.empty
+                    Expression.Typed(sexpr, errorSentinel).withSpan(span) to Substitution.empty
                 }
             }
             is Expression.App -> {
-                val tyRes = freshVar()
+                val tyRes = freshVar().withDummySpan()
                 val (func, s1) = infer(ctx, expr.func)
                 val (arg, s2) = infer(s1.apply(ctx), expr.arg)
 
-                if (func.type.isError() || arg.type.isError()) {
-                    Expression.Typed(Expression.App(func, arg), Type.ErrorSentinel) to Substitution.empty
+                if (func.value.type.value.isError() || arg.value.type.value.isError()) {
+                    Expression.Typed(
+                        Expression.App(func, arg).withSpan(span),
+                        errorSentinel
+                    ).withSpan(span) to Substitution.empty
                 } else {
-                    val s3 = unify(s2.apply(func.type), Type.Fun(arg.type, tyRes))
+                    val s3 =
+                        unify(s2.apply(func.value.type, s2::apply), Type.Fun(arg.value.type, tyRes).withDummySpan())
                     s3.fold({ err ->
                         reportError(err)
-                        Expression.Typed(Expression.App(func, arg), Type.ErrorSentinel) to Substitution.empty
+                        Expression.Typed(
+                            Expression.App(func, arg).withSpan(span),
+                            errorSentinel
+                        ).withSpan(span) to Substitution.empty
                     }, { s3 ->
                         val s = s3.compose(s2).compose(s1)
-                        s.apply(Expression.Typed(Expression.App(func, arg), tyRes)) to s
+                        s.apply(Expression.Typed(Expression.App(func, arg).withSpan(span), tyRes)).withSpan(span) to s
                     })
                 }
-
             }
             is Expression.Typed -> {
                 val (tyExpr, s) = infer(ctx, expr.expr)
-                if (tyExpr.type.isError()) {
-                    Expression.Typed(tyExpr, Type.ErrorSentinel) to Substitution.empty
+                if (tyExpr.value.type.value.isError()) {
+                    Expression.Typed(tyExpr, errorSentinel).withSpan(span) to Substitution.empty
                 } else {
-                    if (!expr.type.freeVars().isEmpty) {
+                    if (!expr.type.value.freeVars().isEmpty) {
                         throw RuntimeException("not allowed")
                     }
-                    val s2 = unify(tyExpr.type, expr.type)
+                    val s2 = unify(tyExpr.value.type, expr.type)
                     s2.fold({ err ->
                         reportError(err)
-                        Expression.Typed(tyExpr, Type.ErrorSentinel) to Substitution.empty
+                        Expression.Typed(tyExpr, errorSentinel).withSpan(span) to Substitution.empty
                     }, { s2 ->
-                        s2.apply(tyExpr) to s2.compose(s)
+                        s2.apply(tyExpr, s2::apply) to s2.compose(s)
                     })
                 }
             }
         }
     }
 
-    fun inferExpr(expr: Expression): Scheme {
+    fun inferExpr(expr: Spanned<Expression>): Scheme {
         val (t, s) = this.infer(initialContext, expr)
         if (this.errors.isNotEmpty()) {
             this.errors.forEach {
                 println("error: ${it.pretty()}")
             }
-            println("inferred AST: ${t.pretty()}")
+            println("inferred AST: ${t.value.pretty()}")
             throw RuntimeException("type errors occurred")
         }
-        println("inferred AST: ${t.pretty()}")
-        return generalize(s.apply(t.type), initialContext)
+        println("inferred AST: ${t.value.pretty()}")
+        return generalize(s.apply(t.value.type.value), initialContext)
     }
 }

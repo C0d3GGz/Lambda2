@@ -18,9 +18,9 @@ fun fromExpr(expr: Expression): RTExpression {
     return when (expr) {
         is Expression.Literal -> RTExpression.Literal(expr.lit)
         is Expression.Var -> RTExpression.Var(expr.ident)
-        is Expression.Lambda -> RTExpression.Lambda(expr.binder, fromExpr(expr.body))
-        is Expression.App -> RTExpression.App(fromExpr(expr.func), fromExpr(expr.arg))
-        is Expression.Typed -> fromExpr(expr.expr)
+        is Expression.Lambda -> RTExpression.Lambda(expr.binder.value, fromExpr(expr.body.value))
+        is Expression.App -> RTExpression.App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
+        is Expression.Typed -> fromExpr(expr.expr.value)
     }
 }
 

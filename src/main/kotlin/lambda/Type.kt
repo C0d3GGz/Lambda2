@@ -8,7 +8,7 @@ sealed class Type {
     object Bool : Type()
     object ErrorSentinel : Type()
     data class Var(val ident: Ident) : Type()
-    data class Fun(val arg: Type, val result: Type) : Type()
+    data class Fun(val arg: Spanned<Type>, val result: Spanned<Type>) : Type()
 
     fun isError() = this is ErrorSentinel
 
@@ -16,9 +16,11 @@ sealed class Type {
         return when (this) {
             Int, Bool, ErrorSentinel -> hashSet()
             is Var -> hashSet(ident)
-            is Fun -> arg.freeVars().union(result.freeVars())
+            is Fun -> arg.value.freeVars().union(result.value.freeVars())
         }
     }
+
+    fun withDummySpan() = Spanned(Span.DUMMY, this)
 
     companion object {
         fun v(ident: String) = Type.Var(Ident(ident))

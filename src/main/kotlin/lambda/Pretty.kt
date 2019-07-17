@@ -15,12 +15,12 @@ private object Pretty{
         return when(expr){
             is Expression.Literal -> prettyPrintLiteral(expr.lit)
             is Expression.Var -> expr.ident.ident
-            is Expression.Lambda -> "(\\${expr.binder.ident}. ${prettyPrintExpr(expr.body,0)})"
+            is Expression.Lambda -> "(\\${expr.binder.value.ident}. ${prettyPrintExpr(expr.body.value,0)})"
             is Expression.App -> {
-                val output = "${prettyPrintExpr(expr.func, depth)} ${prettyPrintExpr(expr.arg, depth + 1)}"
+                val output = "${prettyPrintExpr(expr.func.value, depth)} ${prettyPrintExpr(expr.arg.value, depth + 1)}"
                 return if(depth > 0) "($output)" else output
             }
-            is Expression.Typed -> "(${expr.expr.pretty()} : ${expr.type.pretty()})"
+            is Expression.Typed -> "(${expr.expr.value.pretty()} : ${expr.type.value.pretty()})"
         }
     }
 
@@ -57,7 +57,7 @@ private object Pretty{
             Type.Bool -> "Bool"
             is Type.Var -> type.ident.ident
             is Type.Fun -> {
-                val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"
+                val output = "${prettyPrintType(type.arg.value, depth + 1)} -> ${prettyPrintType(type.result.value, 0)}"
                 return if(depth > 0) "($output)" else output
             }
             Type.ErrorSentinel -> "ERR"
@@ -71,6 +71,7 @@ private object Pretty{
 
 }
 fun Expression.pretty() = Pretty.prettyPrintExpr(this, 0)
+fun EvalExpression.pretty() = toString() // TODO
 fun RTExpression.pretty() = Pretty.prettyPrintRTExpr(this, 0)
 fun Context.pretty() = Pretty.prettyContext(this)
 fun Type.pretty() = Pretty.prettyPrintType(this, 0)

@@ -7,15 +7,15 @@ fun runFile(file: File) {
     file.readText().split(";").filter { it.isNotBlank() }.forEach {
             try {
                 val expr = Parser(Lexer(it)).parseExpression()
-                println("Typechecking: ${expr.pretty()}")
+                println("Typechecking: ${expr.value.pretty()}")
                 try {
                     val ty = Typechecker().inferExpr(expr)
                     println("Inferred: ${ty.pretty()}")
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-                println("Evaluating: ${expr.pretty()}")
-                val result = evalExpr(expr)
+                println("Evaluating: ${expr.value.pretty()}")
+                val result = evalExpr(expr.value)
                 println(result.pretty())
             } catch (e: Exception) {
                 e.printStackTrace()

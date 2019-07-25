@@ -4,53 +4,9 @@ sealed class Token {
     override fun toString(): String = this.javaClass.simpleName
 
     companion object {
-        fun getIdent(token: Token): Ident? {
-            return when (token) {
-                is Ident -> token
-                else -> null
-            }
-        }
-
-        fun getLParen(token: Token): LParen? {
-            return when (token) {
-                is LParen -> token
-                else -> null
-            }
-        }
-
-        fun getRParen(token: Token): RParen? {
-            return when (token) {
-                is RParen -> token
-                else -> null
-            }
-        }
-
-        fun getLam(token: Token): Lam? {
-            return when (token) {
-                is Lam -> token
-                else -> null
-            }
-        }
-
-        fun getDot(token: Token): Dot? {
-            return when (token) {
-                is Dot -> token
-                else -> null
-            }
-        }
-
-        fun getIntToken(token: Token): IntToken? {
-            return when (token) {
-                is IntToken -> token
-                else -> null
-            }
-        }
-
-        fun getBoolToken(token: Token): BoolToken? {
-            return when (token) {
-                is BoolToken -> token
-                else -> null
-            }
+        @Suppress("UNCHECKED_CAST")
+        fun <T> get(token: Token): T? {
+            return token as? T
         }
     }
 }
@@ -157,6 +113,8 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
         return when (result) {
             "true" -> BoolToken(true)
             "false" -> BoolToken(false)
+            "let" -> Let
+            "in" -> In
             else -> Ident(result)
         } to result.length
     }

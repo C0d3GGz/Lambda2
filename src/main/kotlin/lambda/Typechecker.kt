@@ -81,15 +81,15 @@ private val initialContext: TCContext = hashMap(
 class Typechecker {
 
     var fresh: Int = 0
-    var errors = mutableListOf<TypeError>()
+    var errors = mutableListOf<Spanned<TypeError>>()
 
     fun freshVar(): Type {
         fresh += 1
         return Type.Var(Ident("u$fresh"))
     }
 
-    fun reportError(error: TypeError) {
-        errors.add(error)
+    fun reportError(error: TypeError, span: Span) {
+        errors.add(Spanned(span, error))
     }
 
     fun instantiate(scheme: Scheme): Type {
@@ -171,7 +171,7 @@ class Typechecker {
                     val t = instantiate(scheme.get()).withDummySpan()
                     Expression.Typed(sexpr, t).withSpan(span) to Substitution.empty
                 } else {
-                    reportError(TypeError.UnknownVar(expr.ident))
+                    reportError(TypeError.UnknownVar(expr.ident), span)
                     Expression.Typed(sexpr, errorSentinel).withSpan(span) to Substitution.empty
                 }
             }
@@ -189,7 +189,7 @@ class Typechecker {
                     val s3 =
                         unify(s2.apply(func.value.type, s2::apply), Type.Fun(arg.value.type, tyRes).withDummySpan())
                     s3.fold({ err ->
-                        reportError(err)
+                        reportError(err, arg.span)
                         Expression.Typed(
                             Expression.App(func, arg).withSpan(span),
                             errorSentinel
@@ -210,7 +210,7 @@ class Typechecker {
                     }
                     val s2 = unify(tyExpr.value.type, expr.type)
                     s2.fold({ err ->
-                        reportError(err)
+                        reportError(err, span)
                         Expression.Typed(tyExpr, errorSentinel).withSpan(span) to Substitution.empty
                     }, { s2 ->
                         s2.apply(tyExpr, s2::apply) to s2.compose(s)
@@ -224,7 +224,7 @@ class Typechecker {
         val (t, s) = this.infer(initialContext, expr)
         if (this.errors.isNotEmpty()) {
             this.errors.forEach {
-                println("error: ${it.pretty()}")
+                println("error: ${it.value.pretty()} ${if (it.span == Span.DUMMY) "" else it.span.toString()}")
             }
             println("inferred AST: ${t.value.pretty()}")
             throw RuntimeException("type errors occurred")

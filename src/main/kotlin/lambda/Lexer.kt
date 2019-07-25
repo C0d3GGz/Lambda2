@@ -74,7 +74,19 @@ data class Span(val start: Position, val end: Position) {
         val DUMMY = Span(Position(-1, -1), Position(-1, -1))
     }
 }
-data class Spanned<out T>(val span: Span, val value: T)
+data class Spanned<out T>(val span: Span, val value: T) {
+    // This is a bit dodgy... but any other option is too tedious
+    override fun equals(other: Any?): Boolean {
+        if (other is Spanned<*>) {
+            return this.value == other.value
+        }
+        return false
+    }
+
+    override fun hashCode(): Int {
+        return value?.hashCode() ?: 0
+    }
+}
 data class SpannedToken(val span: Span, val token: Token)
 
 class Lexer(input: String) : Iterator<SpannedToken> {

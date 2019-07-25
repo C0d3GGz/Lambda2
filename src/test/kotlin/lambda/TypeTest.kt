@@ -22,7 +22,7 @@ class TypeTest {
     fun `return free vars for functions`() {
         assertEquals(
             hashSet(Ident("a"), Ident("b")),
-            Type.Fun(Type.v("a"), Type.v("b")).freeVars()
+            Type.Fun(Type.v("a").withDummySpan(), Type.v("b").withDummySpan()).freeVars()
         )
     }
 }

@@ -44,12 +44,12 @@ class SubstitutionTest {
 
         val result = substitution.apply(
             Type.Fun(
-                Type.Var(Ident("a")),
-                Type.Var(Ident("b"))
+                Type.Var(Ident("a")).withDummySpan(),
+                Type.Var(Ident("b")).withDummySpan()
             )
         )
 
-        assertEquals(Type.Fun(Type.Int, Type.Bool), result)
+        assertEquals(Type.Fun(Type.Int.withDummySpan(), Type.Bool.withDummySpan()), result)
     }
 
     @Test

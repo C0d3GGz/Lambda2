@@ -34,10 +34,10 @@ class EvalKtTest {
 
     private fun stc(scrutinee: String, replacement: String, expr: String, expected: String){
         val scrutinee_ = Ident(scrutinee)
-        val replacement_ = Parser(Lexer(replacement)).parseExpression()
-        val expr_ = Parser(Lexer(expr)).parseExpression()
-        val expected_= Parser(Lexer(expected)).parseExpression()
-        assertEquals(expected_, Eval().substitute(scrutinee_, replacement_, expr_))
+        val replacement_ = Parser(Lexer(replacement)).parseExpression().value
+        val expr_ = Parser(Lexer(expr)).parseExpression().value
+        val expected_= Parser(Lexer(expected)).parseExpression().value
+        assertEquals(EvalExpression.fromExpr(expected_), Eval().substitute(scrutinee_, EvalExpression.fromExpr(replacement_), EvalExpression.fromExpr(expr_)))
     }
 
     @Test
@@ -49,6 +49,6 @@ class EvalKtTest {
 
     private fun fvtc(input: String, expectedOutput: List<String>) {
         val parser = Parser(Lexer(input))
-        assertEquals(parser.parseExpression().freeVars(), expectedOutput.map(::Ident).toSet())
+        assertEquals(EvalExpression.fromExpr(parser.parseExpression().value).freeVars(), expectedOutput.map(::Ident).toSet())
     }
 }

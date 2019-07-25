@@ -12,6 +12,8 @@ sealed class Expression {
     data class Typed(val expr: Spanned<Expression>, val type: Spanned<Type>) : Expression() {
         override fun withSpan(span: Span) = Spanned(span, this)
     }
+    data class Let(val binder: Spanned<Ident>, val expr: Spanned<Expression>, val body: Spanned<Expression>): Expression()
+
 
     open fun withSpan(span: Span) = Spanned(span, this)
 

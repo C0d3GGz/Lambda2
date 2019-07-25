@@ -16,11 +16,14 @@ object RParen : Token()
 object Lam : Token()
 object Dot : Token()
 object Colon : Token()
+object Equals: Token()
 object Arrow : Token()
 data class Ident(val ident: String) : Token()
 data class IntToken(val int: Int) : Token()
 data class BoolToken(val bool: Boolean) : Token()
 object EOF : Token()
+object Let: Token()
+object In: Token()
 
 data class Position(val line: Int, val column: Int) {
     fun shift(n: Int) = copy(column = column + n)
@@ -76,6 +79,7 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             '\\' -> Lam to 1
             '.' -> Dot to 1
             ':' -> Colon to 1
+            '=' -> Equals to 1
             '-' -> if (iterator.next() == '>') Arrow to 2 else {
                 throw RuntimeException()
             }

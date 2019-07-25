@@ -113,7 +113,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return when (iterator.peek().value) {
             is LParen -> {
                 val (start, _) = iterator.next()
-                var (exprSpan , expr) = parseExpression()
+                var (exprSpan, expr) = parseExpression()
                 if (iterator.peek().value == Colon) {
                     iterator.next()
                     val ty = parseType()
@@ -129,8 +129,24 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             is Ident -> parseVar()
             is IntToken -> parseInt()
             is BoolToken -> parseBool()
+            is Let -> parseLet()
             else -> null
         }
+    }
+
+    private fun expectedError(msg: String): (Spanned<Token>?) -> String = { token ->
+        "$msg saw ${token?.value} at ${token?.span}"
+    }
+
+    private fun parseLet(): Spanned<Expression.Let>? { // let x = e in e
+        val (letSpan, _) = iterator.next()
+        val binder = expectNext<Ident>(expectedError("expected binder"))
+        expectNext<Equals>(expectedError("expected equals"))
+        val expr = parseExpression()
+        expectNext<In>(expectedError("expected in"))
+        val body = parseExpression()
+
+        return Spanned(Span(letSpan.start, body.span.end), Expression.Let(binder, expr, body))
     }
 
     private fun <T> expectNext(error: (token: Spanned<Token>?) -> String): Spanned<T> {

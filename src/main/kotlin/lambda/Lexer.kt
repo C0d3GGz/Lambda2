@@ -64,14 +64,22 @@ object Arrow : Token()
 data class Ident(val ident: String) : Token()
 data class IntToken(val int: Int) : Token()
 data class BoolToken(val bool: Boolean) : Token()
+object EOF : Token()
 
 data class Position(val line: Int, val column: Int) {
     fun shift(n: Int) = copy(column = column + n)
+    override fun toString(): String {
+        return "$line:$column"
+    }
 }
 
 data class Span(val start: Position, val end: Position) {
     companion object {
         val DUMMY = Span(Position(-1, -1), Position(-1, -1))
+    }
+
+    override fun toString(): String {
+        return "${this.start}-${this.end}"
     }
 }
 data class Spanned<out T>(val span: Span, val value: T) {
@@ -87,9 +95,8 @@ data class Spanned<out T>(val span: Span, val value: T) {
         return value?.hashCode() ?: 0
     }
 }
-data class SpannedToken(val span: Span, val token: Token)
 
-class Lexer(input: String) : Iterator<SpannedToken> {
+class Lexer(input: String) : Iterator<Spanned<Token>> {
     var iterator = CharLocations(input.iterator())
 
     init {
@@ -100,8 +107,12 @@ class Lexer(input: String) : Iterator<SpannedToken> {
         return iterator.hasNext()
     }
 
-    override fun next(): SpannedToken {
+    override fun next(): Spanned<Token> {
         val start = iterator.position
+
+        if (!iterator.hasNext()) {
+            return Spanned(Span(start, start), EOF)
+        }
 
         val (token, length) = when (val c = iterator.next()) {
             '(' -> LParen to 1
@@ -121,7 +132,7 @@ class Lexer(input: String) : Iterator<SpannedToken> {
             consumeWhitespace()
         }
 
-        return SpannedToken(Span(start, start.shift(length)), token)
+        return Spanned(Span(start, start.shift(length)), token)
     }
 
     private fun intLiteral(startChar: Char): Pair<Token, Int> {
@@ -168,8 +179,9 @@ class PeekableIterator<T>(private val iterator: Iterator<T>) : Iterator<T> {
             val temp = lookahead!!
             lookahead = null
             temp
-        } else
+        } else {
             iterator.next()
+        }
     }
 
     fun peek(): T {

@@ -8,13 +8,13 @@ import lambda.Token.Companion.getLam
 import lambda.Token.Companion.getRParen
 
 
-class Parser(tokens: Iterator<SpannedToken>) {
+class Parser(tokens: Iterator<Spanned<Token>>) {
 
     val iterator = PeekableIterator(tokens)
 
     fun parseType(): Spanned<Type> {
         val arg = parseTypeAtom()
-        return when (iterator.peek().token) {
+        return when (iterator.peek()?.value) {
             is Arrow -> {
                 iterator.next()
                 val res = parseType()
@@ -25,7 +25,7 @@ class Parser(tokens: Iterator<SpannedToken>) {
     }
 
     fun parseTypeAtom(): Spanned<Type> {
-        val (start, token) = iterator.peek()
+        val (start, token) = iterator.peek() ?: throw RuntimeException("Saw EOF, expected type")
 
         return when (token) {
             is LParen -> {
@@ -33,14 +33,14 @@ class Parser(tokens: Iterator<SpannedToken>) {
 
                 val (_, type) = parseType()
                 val (end, _) = expectNext(::getRParen) { token ->
-                    "missing closing paren saw $token"
+                    "missing closing paren saw ${token?.value} at ${token?.span}"
                 }
 
                 Spanned(Span(start.start, end.end), type)
             }
             is Ident -> {
                 val (_, ident) = expectNext(::getIdent) { token ->
-                    "expected identifier saw $token"
+                    "expected identifier saw ${token?.value} at ${token?.span}"
                 }
 
                 val type = when (ident.ident) {
@@ -51,13 +51,13 @@ class Parser(tokens: Iterator<SpannedToken>) {
 
                 Spanned(start, type)
             }
-            else -> throw RuntimeException("expected type found $token")
+            else -> throw RuntimeException("expected type found $token at $start")
         }
     }
 
     fun parseVar(): Spanned<Expression.Var> {
         val (span, ident) = expectNext(::getIdent) { token ->
-            "expected identifier saw $token"
+            "expected identifier saw ${token?.value} at ${token?.span}"
         }
         return Spanned(span, Expression.Var(ident))
     }
@@ -83,11 +83,11 @@ class Parser(tokens: Iterator<SpannedToken>) {
         }
 
         val binder = expectNext(::getIdent) { token ->
-            "expected identifier saw $token"
+            "expected identifier saw ${token?.value} at ${token?.span}"
         }
 
         expectNext(::getDot) { token ->
-            "expected dot saw $token"
+            "expected dot saw ${token?.value} at ${token?.span}"
         }
 
         val body = parseExpression()
@@ -115,17 +115,17 @@ class Parser(tokens: Iterator<SpannedToken>) {
     }
 
     private fun parseAtom(): Spanned<Expression>? {
-        return when (iterator.peek().token) {
+        return when (iterator.peek().value) {
             is LParen -> {
                 val (start, _) = iterator.next()
                 var (exprSpan , expr) = parseExpression()
-                if (iterator.peek().token == Colon) {
+                if (iterator.peek().value == Colon) {
                     iterator.next()
                     val ty = parseType()
                     expr = Expression.Typed(Spanned(exprSpan, expr), ty)
                 }
                 val (end, _) = expectNext(::getRParen) { token ->
-                    "missing closing paren saw $token"
+                    "missing closing paren saw ${token?.value} at ${token?.span}"
                 }
 
                 Spanned(Span(start.start, end.end), expr)
@@ -138,7 +138,7 @@ class Parser(tokens: Iterator<SpannedToken>) {
         }
     }
 
-    private fun <T> expectNext(pred: (token: Token) -> T?, error: (token: Token?) -> String): Spanned<T> {
+    private fun <T> expectNext(pred: (token: Token) -> T?, error: (token: Spanned<Token>?) -> String): Spanned<T> {
         if (!iterator.hasNext()) {
             throw RuntimeException(error(null))
         }
@@ -146,7 +146,7 @@ class Parser(tokens: Iterator<SpannedToken>) {
 
         pred(token)?.let {
             return Spanned(span, it)
-        } ?: throw RuntimeException(error(token))
+        } ?: throw RuntimeException(error(Spanned(span, token)))
     }
 }
 

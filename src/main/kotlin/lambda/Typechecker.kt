@@ -220,7 +220,8 @@ class Typechecker {
             }
             is Expression.Let -> {
                 val (tyBinder, s1) = infer(ctx, expr.expr)
-                val tmpCtx = s1.apply(ctx.put(expr.binder.value, Scheme(emptyList(), tyBinder.value.type.value)))
+                val genBinder = generalize(tyBinder.value.type.value, ctx)
+                val tmpCtx = s1.apply(ctx.put(expr.binder.value, genBinder))
                 val (tyBody, s2) = infer(tmpCtx, s1.apply(expr.body, s1::apply))
 
                 val s = s2.compose(s1)

@@ -38,6 +38,7 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
             is Expression.Lambda -> Expression.Lambda(expr.binder, apply(expr.body, ::apply))
             is Expression.App -> Expression.App(apply(expr.func, ::apply), apply(expr.arg, ::apply))
             is Expression.Typed -> apply(expr)
+            is Expression.Let -> Expression.Let(expr.binder, apply(expr.expr, ::apply), apply(expr.body, ::apply))
         }
     }
 
@@ -216,6 +217,18 @@ class Typechecker {
                         s2.apply(tyExpr, s2::apply) to s2.compose(s)
                     })
                 }
+            }
+            is Expression.Let -> {
+                val (tyBinder, s1) = infer(ctx, expr.expr)
+                val tmpCtx = s1.apply(ctx.put(expr.binder.value, Scheme(emptyList(), tyBinder.value.type.value)))
+                val (tyBody, s2) = infer(tmpCtx, s1.apply(expr.body, s1::apply))
+
+                val s = s2.compose(s1)
+
+                Expression.Typed(
+                    Expression.Let(expr.binder, tyBinder, tyBody).withSpan(span),
+                    tyBody.value.type
+                ).withSpan(span) to s
             }
         }
     }

@@ -5,7 +5,8 @@ sealed class EvalExpression {
     data class Var(val ident: Ident) : EvalExpression()
     data class Lambda(val binder: Ident, val body: EvalExpression) : EvalExpression()
     data class App(val func: EvalExpression, val arg: EvalExpression) : EvalExpression()
-    data class Typed(val expr: EvalExpression, val type: Type): EvalExpression()
+    data class Typed(val expr: EvalExpression, val type: Type) : EvalExpression()
+    data class Let(val binder: Ident, val expr: EvalExpression, val body: EvalExpression) : EvalExpression()
 
     companion object {
         fun fromExpr(expr: Expression): EvalExpression = when (expr) {
@@ -14,6 +15,7 @@ sealed class EvalExpression {
             is Expression.Lambda -> Lambda(expr.binder.value, fromExpr(expr.body.value))
             is Expression.App -> App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
             is Expression.Typed -> Typed(fromExpr(expr.expr.value), expr.type.value)
+            is Expression.Let -> Let(expr.binder.value, fromExpr(expr.expr.value), fromExpr(expr.body.value))
         }
     }
 }
@@ -43,6 +45,19 @@ class Eval {
                     substitute(scrutinee, replacement, expr.arg)
                 )
             is EvalExpression.Typed -> EvalExpression.Typed(substitute(scrutinee, replacement, expr.expr), expr.type)
+            is EvalExpression.Let -> {
+                val body = when {
+                    expr.binder == scrutinee -> expr.body
+                    replacement.freeVars().contains(expr.binder) -> {
+                        val freshBinder = freshName(expr.binder)
+                        val renamedBody = substitute(expr.binder, EvalExpression.Var(freshBinder), expr.body)
+                        substitute(scrutinee, replacement, renamedBody)
+                    }
+                    else -> substitute(scrutinee, replacement, expr.body)
+                }
+
+                EvalExpression.Let(expr.binder, substitute(scrutinee, replacement, expr.expr), body)
+            }
         }
     }
 
@@ -59,6 +74,7 @@ class Eval {
                 }
                 else -> EvalExpression.App(evaledFunc, expr.arg)
             }
+            is EvalExpression.Let -> eval(substitute(expr.binder, expr.expr, expr.body))
             else -> expr
         }
     }
@@ -71,5 +87,6 @@ fun EvalExpression.freeVars(): Set<Ident> {
         is EvalExpression.Lambda -> body.freeVars().filter { it != binder }.toSet()
         is EvalExpression.App -> func.freeVars().union(arg.freeVars())
         is EvalExpression.Typed -> expr.freeVars()
+        is EvalExpression.Let -> body.freeVars().filter { it != binder }.toSet().union(expr.freeVars())
     }
 }

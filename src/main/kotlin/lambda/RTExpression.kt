@@ -1,8 +1,7 @@
 package lambda
 
-import java.lang.Exception
 import io.vavr.collection.HashMap
-import io.vavr.kotlin.*
+import io.vavr.kotlin.hashMap
 
 typealias Context = HashMap<Ident, RTExpression>
 
@@ -21,6 +20,15 @@ fun fromExpr(expr: Expression): RTExpression {
         is Expression.Lambda -> RTExpression.Lambda(expr.binder.value, fromExpr(expr.body.value))
         is Expression.App -> RTExpression.App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
         is Expression.Typed -> fromExpr(expr.expr.value)
+        is Expression.Let -> {
+            // let x = 4 in add x 5
+            // (\x. add x 5) 4
+
+            RTExpression.App(
+                RTExpression.Lambda(expr.binder.value, fromExpr(expr.body.value)),
+                fromExpr(expr.expr.value)
+            )
+        }
     }
 }
 

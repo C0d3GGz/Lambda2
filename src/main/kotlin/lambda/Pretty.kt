@@ -21,6 +21,7 @@ private object Pretty{
                 return if(depth > 0) "($output)" else output
             }
             is Expression.Typed -> "(${expr.expr.value.pretty()} : ${expr.type.value.pretty()})"
+            is Expression.Let -> "let ${expr.binder.value.ident} = ${expr.expr.value.pretty()} in ${expr.body.value.pretty()}"
         }
     }
 

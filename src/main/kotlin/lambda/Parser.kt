@@ -138,7 +138,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         "$msg saw ${token?.value} at ${token?.span}"
     }
 
-    private fun parseLet(): Spanned<Expression.Let>? { // let x = e in e
+    private fun parseLet(): Spanned<Expression.Let>? {
         val (letSpan, _) = iterator.next()
         val binder = expectNext<Ident>(expectedError("expected binder"))
         expectNext<Equals>(expectedError("expected equals"))

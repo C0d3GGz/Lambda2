@@ -130,6 +130,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             is IntToken -> parseInt()
             is BoolToken -> parseBool()
             is Let -> parseLet()
+            is If -> parseIf()
             else -> null
         }
     }
@@ -147,6 +148,17 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         val body = parseExpression()
 
         return Spanned(Span(letSpan.start, body.span.end), Expression.Let(binder, expr, body))
+    }
+
+    private fun parseIf(): Spanned<Expression.If>? { // if true then 3 else 4
+        val (ifSpan, _) = iterator.next()
+        val condition = parseExpression()
+        expectNext<Then>(expectedError("expected then"))
+        val thenBranch = parseExpression()
+        expectNext<Else>(expectedError("expected else"))
+        val elseBranch = parseExpression()
+
+        return Spanned(Span(ifSpan.start, elseBranch.span.end), Expression.If(condition, thenBranch, elseBranch))
     }
 
     private fun <T> expectNext(error: (token: Spanned<Token>?) -> String): Spanned<T> {

@@ -13,7 +13,7 @@ sealed class Expression {
         override fun withSpan(span: Span) = Spanned(span, this)
     }
     data class Let(val binder: Spanned<Ident>, val expr: Spanned<Expression>, val body: Spanned<Expression>): Expression()
-
+    data class If(val condition: Spanned<Expression>, val thenBranch: Spanned<Expression>, val elseBranch: Spanned<Expression>): Expression()
 
     open fun withSpan(span: Span) = Spanned(span, this)
 

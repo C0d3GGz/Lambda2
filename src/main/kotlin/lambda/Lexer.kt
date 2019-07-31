@@ -24,6 +24,9 @@ data class BoolToken(val bool: Boolean) : Token()
 object EOF : Token()
 object Let: Token()
 object In: Token()
+object If: Token()
+object Then: Token()
+object Else: Token()
 
 data class Position(val line: Int, val column: Int) {
     fun shift(n: Int) = copy(column = column + n)
@@ -119,6 +122,9 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             "false" -> BoolToken(false)
             "let" -> Let
             "in" -> In
+            "if" -> If
+            "then" -> Then
+            "else" -> Else
             else -> Ident(result)
         } to result.length
     }

@@ -39,6 +39,11 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
             is Expression.App -> Expression.App(apply(expr.func, ::apply), apply(expr.arg, ::apply))
             is Expression.Typed -> apply(expr)
             is Expression.Let -> Expression.Let(expr.binder, apply(expr.expr, ::apply), apply(expr.body, ::apply))
+            is Expression.If -> Expression.If(
+                apply(expr.condition, ::apply),
+                apply(expr.thenBranch, ::apply),
+                apply(expr.elseBranch, ::apply)
+            )
         }
     }
 
@@ -60,11 +65,13 @@ sealed class TypeError {
     data class Unification(val ty1: Type, val ty2: Type) : TypeError()
     data class UnknownVar(val ident: Ident) : TypeError()
     data class OccursCheck(val ident: Ident, val type: Type) : TypeError()
+    data class IfCondition(val type: Type) : TypeError()
 
     fun pretty(): String = when (this) {
         is Unification -> "Failed to unify ${ty1.pretty()} with ${ty2.pretty()}"
         is UnknownVar -> "Unknown var ${ident.ident}"
         is OccursCheck -> "Failed to infer the infinite type ${ident.ident} ~ ${type.pretty()}"
+        is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
     }
 }
 
@@ -220,16 +227,51 @@ class Typechecker {
             }
             is Expression.Let -> {
                 val (tyBinder, s1) = infer(ctx, expr.expr)
-                val genBinder = generalize(tyBinder.value.type.value, ctx)
+                val genBinder = generalize(tyBinder.value.type.value, s1.apply(ctx))
                 val tmpCtx = s1.apply(ctx.put(expr.binder.value, genBinder))
                 val (tyBody, s2) = infer(tmpCtx, s1.apply(expr.body, s1::apply))
 
                 val s = s2.compose(s1)
 
-                Expression.Typed(
+                s.apply(Expression.Typed(
                     Expression.Let(expr.binder, tyBinder, tyBody).withSpan(span),
                     tyBody.value.type
-                ).withSpan(span) to s
+                )).withSpan(span) to s
+            }
+            is Expression.If -> {
+                var hasError = false
+                val (tyCond, s1) = infer(ctx, expr.condition)
+
+                val s2 = unify(tyCond.value.type, Type.Bool.withDummySpan()).fold(
+                    {
+                        reportError(TypeError.IfCondition(tyCond.value.type.value), expr.condition.span)
+                        hasError = true
+                        Substitution.empty
+                    },
+                    { s -> s }
+                )
+
+                val ctx = s2.apply(s1.apply(ctx))
+                val (tyThen, s3) = infer(ctx, expr.thenBranch)
+                val (tyElse, s4) = infer(s3.apply(ctx), expr.elseBranch)
+
+                val s5 = unify(s4.apply(tyThen.value.type, s4::apply), tyElse.value.type).fold({ err ->
+                    reportError(err, span)
+                    hasError = true
+                    Substitution.empty
+                }, { s -> s })
+
+                val s = s5.compose(s4).compose(s3).compose(s2).compose(s1)
+
+                val type = if (hasError)
+                    errorSentinel
+                else
+                    s.apply(tyThen.value.type, s::apply)
+
+                s.apply(Expression.Typed(
+                    Expression.If(tyCond, tyThen, tyElse).withSpan(span),
+                    type
+                )).withSpan(span) to s
             }
         }
     }

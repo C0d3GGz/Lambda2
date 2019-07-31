@@ -11,6 +11,8 @@ sealed class RTExpression {
     data class Lambda(val binder: Ident, val body: RTExpression) : RTExpression()
     data class Closure(val binder: Ident, val body: RTExpression, val context: Context) : RTExpression()
     data class App(val func: RTExpression, val arg: RTExpression) : RTExpression()
+    data class If(val condition: RTExpression, val thenBranch: RTExpression, val elseBranch: RTExpression) :
+        RTExpression()
 }
 
 fun fromExpr(expr: Expression): RTExpression {
@@ -29,6 +31,11 @@ fun fromExpr(expr: Expression): RTExpression {
                 fromExpr(expr.expr.value)
             )
         }
+        is Expression.If -> RTExpression.If(
+            fromExpr(expr.condition.value),
+            fromExpr(expr.thenBranch.value),
+            fromExpr(expr.elseBranch.value)
+        )
     }
 }
 
@@ -77,7 +84,16 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                     val tmpCtx = evaledClosure.context.put(evaledClosure.binder, evaledArg)
                     eval(tmpCtx, evaledClosure.body)
                 }
-                else -> throw EvalException("${evaledClosure} is not a function.")
+                else -> throw EvalException("$evaledClosure is not a function.")
+            }
+        }
+        is RTExpression.If -> {
+            val evalCondition = eval(ctx, expr.condition)
+
+            if (evalCondition is RTExpression.Literal && evalCondition.lit is BoolLit) {
+                if (evalCondition.lit.bool) eval(ctx, expr.thenBranch) else eval(ctx, expr.elseBranch)
+            } else {
+                throw EvalException("$evalCondition is not a bool.")
             }
         }
     }

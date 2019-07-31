@@ -7,6 +7,8 @@ sealed class EvalExpression {
     data class App(val func: EvalExpression, val arg: EvalExpression) : EvalExpression()
     data class Typed(val expr: EvalExpression, val type: Type) : EvalExpression()
     data class Let(val binder: Ident, val expr: EvalExpression, val body: EvalExpression) : EvalExpression()
+    data class If(val condition: EvalExpression, val thenBranch: EvalExpression, val elseBranch: EvalExpression) :
+        EvalExpression()
 
     companion object {
         fun fromExpr(expr: Expression): EvalExpression = when (expr) {
@@ -16,6 +18,11 @@ sealed class EvalExpression {
             is Expression.App -> App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
             is Expression.Typed -> Typed(fromExpr(expr.expr.value), expr.type.value)
             is Expression.Let -> Let(expr.binder.value, fromExpr(expr.expr.value), fromExpr(expr.body.value))
+            is Expression.If -> If(
+                fromExpr(expr.condition.value),
+                fromExpr(expr.thenBranch.value),
+                fromExpr(expr.elseBranch.value)
+            )
         }
     }
 }
@@ -58,6 +65,11 @@ class Eval {
 
                 EvalExpression.Let(expr.binder, substitute(scrutinee, replacement, expr.expr), body)
             }
+            is EvalExpression.If -> EvalExpression.If(
+                substitute(scrutinee, replacement, expr.condition),
+                substitute(scrutinee, replacement, expr.thenBranch),
+                substitute(scrutinee, replacement, expr.elseBranch)
+            )
         }
     }
 
@@ -75,6 +87,15 @@ class Eval {
                 else -> EvalExpression.App(evaledFunc, expr.arg)
             }
             is EvalExpression.Let -> eval(substitute(expr.binder, expr.expr, expr.body))
+            is EvalExpression.If -> {
+                val evalCondition = eval(expr.condition)
+
+                if (evalCondition is EvalExpression.Literal && evalCondition.lit is BoolLit) {
+                    if (evalCondition.lit.bool) eval(expr.thenBranch) else eval(expr.elseBranch)
+                } else {
+                    EvalExpression.If(evalCondition, expr.thenBranch, expr.elseBranch)
+                }
+            }
             else -> expr
         }
     }
@@ -88,5 +109,6 @@ fun EvalExpression.freeVars(): Set<Ident> {
         is EvalExpression.App -> func.freeVars().union(arg.freeVars())
         is EvalExpression.Typed -> expr.freeVars()
         is EvalExpression.Let -> body.freeVars().filter { it != binder }.toSet().union(expr.freeVars())
+        is EvalExpression.If -> condition.freeVars().union(thenBranch.freeVars()).union(elseBranch.freeVars())
     }
 }

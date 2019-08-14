@@ -80,10 +80,28 @@ private val initialContext: TCContext = hashMap(
         emptyList(),
         Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
     ),
+    Ident("sub") to Scheme(
+        emptyList(),
+        Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
+    ),
+    Ident("eq") to Scheme(
+        emptyList(),
+        Type.Fun(
+            Type.Int.withDummySpan(),
+            Type.Fun(Type.Int.withDummySpan(), Type.Bool.withDummySpan()).withDummySpan()
+        )
+    ),
     Ident("identity") to Scheme(
         listOf(Ident("a")),
         Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan())
-    ) // forall a. a -> a
+    ), // forall a. a -> a
+    Ident("fix") to Scheme(
+        listOf(Ident("a")),
+        Type.Fun(
+            Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan()).withDummySpan(),
+            Type.v("a").withDummySpan()
+        )
+    ) // forall a. (a -> a) -> a
 )
 
 class Typechecker {
@@ -233,10 +251,12 @@ class Typechecker {
 
                 val s = s2.compose(s1)
 
-                s.apply(Expression.Typed(
-                    Expression.Let(expr.binder, tyBinder, tyBody).withSpan(span),
-                    tyBody.value.type
-                )).withSpan(span) to s
+                s.apply(
+                    Expression.Typed(
+                        Expression.Let(expr.binder, tyBinder, tyBody).withSpan(span),
+                        tyBody.value.type
+                    )
+                ).withSpan(span) to s
             }
             is Expression.If -> {
                 var hasError = false
@@ -268,10 +288,12 @@ class Typechecker {
                 else
                     s.apply(tyThen.value.type, s::apply)
 
-                s.apply(Expression.Typed(
-                    Expression.If(tyCond, tyThen, tyElse).withSpan(span),
-                    type
-                )).withSpan(span) to s
+                s.apply(
+                    Expression.Typed(
+                        Expression.If(tyCond, tyThen, tyElse).withSpan(span),
+                        type
+                    )
+                ).withSpan(span) to s
             }
         }
     }

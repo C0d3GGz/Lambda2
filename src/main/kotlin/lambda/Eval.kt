@@ -1,19 +1,24 @@
 package lambda
 
+import lambda.syntax.BoolLit
+import lambda.syntax.Expression
+import lambda.syntax.Lit
+import lambda.syntax.Name
+
 sealed class EvalExpression {
     data class Literal(val lit: Lit) : EvalExpression()
-    data class Var(val ident: Ident) : EvalExpression()
-    data class Lambda(val binder: Ident, val body: EvalExpression) : EvalExpression()
+    data class Var(val name: Name) : EvalExpression()
+    data class Lambda(val binder: Name, val body: EvalExpression) : EvalExpression()
     data class App(val func: EvalExpression, val arg: EvalExpression) : EvalExpression()
     data class Typed(val expr: EvalExpression, val type: Type) : EvalExpression()
-    data class Let(val binder: Ident, val expr: EvalExpression, val body: EvalExpression) : EvalExpression()
+    data class Let(val binder: Name, val expr: EvalExpression, val body: EvalExpression) : EvalExpression()
     data class If(val condition: EvalExpression, val thenBranch: EvalExpression, val elseBranch: EvalExpression) :
         EvalExpression()
 
     companion object {
         fun fromExpr(expr: Expression): EvalExpression = when (expr) {
             is Expression.Literal -> Literal(expr.lit)
-            is Expression.Var -> Var(expr.ident)
+            is Expression.Var -> Var(expr.name)
             is Expression.Lambda -> Lambda(expr.binder.value, fromExpr(expr.body.value))
             is Expression.App -> App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
             is Expression.Typed -> Typed(fromExpr(expr.expr.value), expr.type.value)
@@ -32,10 +37,10 @@ class Eval {
     var freshSupply = 0
 
     // substitute(s, r, e) = [s -> r] e
-    fun substitute(scrutinee: Ident, replacement: EvalExpression, expr: EvalExpression): EvalExpression {
+    fun substitute(scrutinee: Name, replacement: EvalExpression, expr: EvalExpression): EvalExpression {
         return when (expr) {
             is EvalExpression.Literal -> expr
-            is EvalExpression.Var -> if (expr.ident == scrutinee) replacement else expr
+            is EvalExpression.Var -> if (expr.name == scrutinee) replacement else expr
             is EvalExpression.Lambda ->
                 when {
                     expr.binder == scrutinee -> expr
@@ -73,9 +78,9 @@ class Eval {
         }
     }
 
-    private fun freshName(oldName: Ident): Ident {
+    private fun freshName(oldName: Name): Name {
         freshSupply++
-        return Ident(freshSupply.toString() + oldName.ident)
+        return Name(freshSupply.toString() + oldName.value)
     }
 
     fun eval(expr: EvalExpression): EvalExpression {
@@ -101,10 +106,10 @@ class Eval {
     }
 }
 
-fun EvalExpression.freeVars(): Set<Ident> {
+fun EvalExpression.freeVars(): Set<Name> {
     return when (this) {
         is EvalExpression.Literal -> emptySet()
-        is EvalExpression.Var -> hashSetOf(ident)
+        is EvalExpression.Var -> hashSetOf(name)
         is EvalExpression.Lambda -> body.freeVars().filter { it != binder }.toSet()
         is EvalExpression.App -> func.freeVars().union(arg.freeVars())
         is EvalExpression.Typed -> expr.freeVars()

@@ -2,14 +2,15 @@ package lambda
 
 import io.vavr.collection.HashMap
 import io.vavr.kotlin.hashMap
+import lambda.syntax.*
 
-typealias Context = HashMap<Ident, RTExpression>
+typealias Context = HashMap<Name, RTExpression>
 
 sealed class RTExpression {
     data class Literal(val lit: Lit) : RTExpression()
-    data class Var(val ident: Ident) : RTExpression()
-    data class Lambda(val binder: Ident, val body: RTExpression) : RTExpression()
-    data class Closure(val binder: Ident, val body: RTExpression, val context: Context) : RTExpression()
+    data class Var(val name: Name) : RTExpression()
+    data class Lambda(val binder: Name, val body: RTExpression) : RTExpression()
+    data class Closure(val binder: Name, val body: RTExpression, val context: Context) : RTExpression()
     data class App(val func: RTExpression, val arg: RTExpression) : RTExpression()
     data class If(val condition: RTExpression, val thenBranch: RTExpression, val elseBranch: RTExpression) :
         RTExpression()
@@ -18,7 +19,7 @@ sealed class RTExpression {
 fun fromExpr(expr: Expression): RTExpression {
     return when (expr) {
         is Expression.Literal -> RTExpression.Literal(expr.lit)
-        is Expression.Var -> RTExpression.Var(expr.ident)
+        is Expression.Var -> RTExpression.Var(expr.name)
         is Expression.Lambda -> RTExpression.Lambda(expr.binder.value, fromExpr(expr.body.value))
         is Expression.App -> RTExpression.App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
         is Expression.Typed -> fromExpr(expr.expr.value)
@@ -60,34 +61,34 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
     return when (expr) {
         is RTExpression.Literal -> expr
         is RTExpression.Var -> {
-            when (expr.ident) {
-                Ident("#add") -> {
+            when (expr.name) {
+                Name("#add") -> {
                     RTExpression.Literal(
                         IntLit(
-                            matchIntLiteral(ctx.get(Ident("x")).get())
-                                    + matchIntLiteral(ctx.get(Ident("y")).get())
+                            matchIntLiteral(ctx.get(Name("x")).get())
+                                    + matchIntLiteral(ctx.get(Name("y")).get())
                         )
                     )
                 }
-                Ident("#sub") -> {
+                Name("#sub") -> {
                     RTExpression.Literal(
                         IntLit(
-                            matchIntLiteral(ctx.get(Ident("x")).get())
-                                    - matchIntLiteral(ctx.get(Ident("y")).get())
+                            matchIntLiteral(ctx.get(Name("x")).get())
+                                    - matchIntLiteral(ctx.get(Name("y")).get())
                         )
                     )
                 }
-                Ident("#eq") -> {
+                Name("#eq") -> {
                     RTExpression.Literal(
                         BoolLit(
-                            matchIntLiteral(ctx.get(Ident("x")).get())
-                                    == matchIntLiteral(ctx.get(Ident("y")).get())
+                            matchIntLiteral(ctx.get(Name("x")).get())
+                                    == matchIntLiteral(ctx.get(Name("y")).get())
                         )
                     )
                 }
                 else -> {
-                    val res = ctx.get(expr.ident)
-                    return res.getOrElseThrow { EvalException("${expr.ident} was undefined.") }
+                    val res = ctx.get(expr.name)
+                    return res.getOrElseThrow { EvalException("${expr.name} was undefined.") }
                 }
             }
         }
@@ -118,30 +119,30 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
 fun evalExpr(expr: Expression): RTExpression {
     val primAdd: RTExpression =
         RTExpression.Closure(
-            Ident("x"),
+            Name("x"),
             RTExpression.Lambda(
-                Ident("y"),
-                RTExpression.Var(Ident("#add"))
+                Name("y"),
+                RTExpression.Var(Name("#add"))
             ),
             hashMap()
         )
 
     val primSub: RTExpression =
         RTExpression.Closure(
-            Ident("x"),
+            Name("x"),
             RTExpression.Lambda(
-                Ident("y"),
-                RTExpression.Var(Ident("#sub"))
+                Name("y"),
+                RTExpression.Var(Name("#sub"))
             ),
             hashMap()
         )
 
     val primEq: RTExpression =
         RTExpression.Closure(
-            Ident("x"),
+            Name("x"),
             RTExpression.Lambda(
-                Ident("y"),
-                RTExpression.Var(Ident("#eq"))
+                Name("y"),
+                RTExpression.Var(Name("#eq"))
             ),
             hashMap()
         )
@@ -149,17 +150,17 @@ fun evalExpr(expr: Expression): RTExpression {
     // Z = λf· (λx· f (λy· x x y)) (λx· f (λy· x x y))
 
     val innerZ = RTExpression.Lambda(
-        Ident("x"),
+        Name("x"),
         RTExpression.App(
-            RTExpression.Var(Ident("f")),
+            RTExpression.Var(Name("f")),
             RTExpression.Lambda(
-                Ident("y"),
+                Name("y"),
                 RTExpression.App(
                     RTExpression.App(
-                        RTExpression.Var(Ident("x")),
-                        RTExpression.Var(Ident("x"))
+                        RTExpression.Var(Name("x")),
+                        RTExpression.Var(Name("x"))
                     ),
-                    RTExpression.Var(Ident("y"))
+                    RTExpression.Var(Name("y"))
                 )
             )
         )
@@ -167,7 +168,7 @@ fun evalExpr(expr: Expression): RTExpression {
 
     val z: RTExpression =
         RTExpression.Closure(
-            Ident("f"),
+            Name("f"),
             RTExpression.App(
                 innerZ,
                 innerZ
@@ -176,10 +177,10 @@ fun evalExpr(expr: Expression): RTExpression {
         )
 
     val initialContext: Context = hashMap(
-        Ident("add") to primAdd,
-        Ident("sub") to primSub,
-        Ident("eq") to primEq,
-        Ident("fix") to z
+        Name("add") to primAdd,
+        Name("sub") to primSub,
+        Name("eq") to primEq,
+        Name("fix") to z
     )
     return eval(initialContext, fromExpr(expr))
 }

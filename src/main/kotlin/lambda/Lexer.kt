@@ -1,4 +1,5 @@
 package lambda
+import lambda.Token.*
 
 sealed class Token {
     override fun toString(): String = this.javaClass.simpleName
@@ -9,24 +10,30 @@ sealed class Token {
             return token as? T
         }
     }
-}
 
-object LParen : Token()
-object RParen : Token()
-object Lam : Token()
-object Dot : Token()
-object Colon : Token()
-object Equals: Token()
-object Arrow : Token()
-data class Ident(val ident: String) : Token()
-data class IntToken(val int: Int) : Token()
-data class BoolToken(val bool: Boolean) : Token()
-object EOF : Token()
-object Let: Token()
-object In: Token()
-object If: Token()
-object Then: Token()
-object Else: Token()
+    object LParen : Token()
+    object RParen : Token()
+    object LBrace : Token()
+    object RBrace : Token()
+    object Lam : Token()
+    object Dot : Token()
+    object Comma : Token()
+    object Semicolon: Token()
+    object Colon : Token()
+    object Equals: Token()
+    object Arrow : Token()
+    data class Ident(val ident: String) : Token()
+    data class IntToken(val int: Int) : Token()
+    data class BoolToken(val bool: Boolean) : Token()
+    object EOF : Token()
+    object Let: Token()
+    object In: Token()
+    object Type: Token()
+    object Forall: Token()
+    object If: Token()
+    object Then: Token()
+    object Else: Token()
+}
 
 data class Position(val line: Int, val column: Int) {
     fun shift(n: Int) = copy(column = column + n)
@@ -79,8 +86,12 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
         val (token, length) = when (val c = iterator.next()) {
             '(' -> LParen to 1
             ')' -> RParen to 1
+            '{' -> LBrace to 1
+            '}' -> RBrace to 1
             '\\' -> Lam to 1
             '.' -> Dot to 1
+            ';' -> Semicolon to 1
+            ',' -> Comma to 1
             ':' -> Colon to 1
             '=' -> Equals to 1
             '-' -> if (iterator.next() == '>') Arrow to 2 else {
@@ -125,6 +136,7 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             "if" -> If
             "then" -> Then
             "else" -> Else
+            "forall" -> Forall
             else -> Ident(result)
         } to result.length
     }

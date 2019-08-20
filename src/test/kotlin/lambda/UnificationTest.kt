@@ -2,10 +2,9 @@ package lambda
 
 
 import io.vavr.kotlin.hashMap
+import lambda.syntax.Name
+import org.junit.Assert.assertEquals
 import org.junit.Test
-
-import org.junit.Assert.*
-import kotlin.RuntimeException
 
 class UnificationTest {
 
@@ -38,7 +37,7 @@ class UnificationTest {
     @Test
     fun `var unifies with int`() {
         assertEquals(
-            Substitution(hashMap(Ident("a") to Type.Int)),
+            Substitution(hashMap(Name("a") to Type.Int)),
             unify(Type.v("a"), Type.Int)
         )
     }
@@ -46,7 +45,7 @@ class UnificationTest {
     @Test
     fun `int unifies with var`() {
         assertEquals(
-            Substitution(hashMap(Ident("a") to Type.Int)),
+            Substitution(hashMap(Name("a") to Type.Int)),
             unify(Type.Int, Type.v("a"))
         )
     }
@@ -64,7 +63,7 @@ class UnificationTest {
     @Test
     fun `functions unify by unifying their respective argument and result types`() {
         assertEquals(
-            Substitution(hashMap(Ident("a") to Type.Bool)),
+            Substitution(hashMap(Name("a") to Type.Bool)),
             unify(fn(Type.Int, Type.v("a")), fn(Type.Int, Type.Bool))
         )
     }
@@ -72,7 +71,7 @@ class UnificationTest {
     @Test
     fun `information found while unifying argument types gets propagated to the result types`() {
         assertEquals(
-            Substitution(hashMap(Ident("a") to Type.Int, Ident("b") to Type.Int)),
+            Substitution(hashMap(Name("a") to Type.Int, Name("b") to Type.Int)),
             unify(fn(Type.v("a"), Type.v("a")), fn(Type.Int, Type.v("b")))
         )
     }

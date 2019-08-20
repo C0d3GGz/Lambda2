@@ -1,16 +1,119 @@
 package lambda
 
 import lambda.Token.Companion.get
+import lambda.syntax.*
 
 
 class Parser(tokens: Iterator<Spanned<Token>>) {
 
     val iterator = PeekableIterator(tokens)
 
+    fun parseSourceFile(): SourceFile {
+        val parsedDeclarations = mutableListOf<Declaration>()
+        val startPosition = iterator.peek().span.start
+        while (true) {
+            if (iterator.peek().value == Token.EOF) break
+            parsedDeclarations += parseDeclaration()
+        }
+        val endPosition = parsedDeclarations.lastOrNull()?.span?.end ?: startPosition
+        return SourceFile(parsedDeclarations, Span(startPosition, endPosition))
+    }
+
+    fun parseDeclaration(): Declaration {
+        val t = iterator.peek()
+        return when (t.value) {
+            is Token.Let -> {
+                parseValueDeclaration()
+            }
+            is Token.Type -> {
+                parseTypeDeclaration()
+            }
+            else -> throw RuntimeException("expected a type or value declaration at ${t.span.start}")
+        }
+    }
+
+    fun parseValueDeclaration(): Declaration.Value {
+        val startPosition = iterator.next().span.start
+        val name = parseName()
+        expectNext<Token.Colon>(expectedError("expected colon"))
+        val scheme: Spanned<Scheme> = parseScheme()
+        expectNext<Token.Equals>(expectedError("expected equals"))
+        val expression = parseExpression()
+        val semi = expectNext<Token.Semicolon>(expectedError("value declarations need to end with semicolon"))
+
+        val span = Span(startPosition, semi.span.end)
+
+        return Declaration.Value(name, scheme, expression, span)
+    }
+
+    private fun parseScheme(): Spanned<Scheme> {
+        val vars = mutableListOf<Spanned<Name>>()
+        val t = iterator.peek()
+        val startPosition = t.span.start
+        if (t.value is Token.Forall) {
+            iterator.next()
+            while (true) {
+                vars += parseName()
+                if (iterator.peek().value == Token.Dot) {
+                    iterator.next()
+                    break
+                }
+            }
+        }
+        val ty = parseType()
+        val endPosition = ty.span.end
+
+        return Spanned(Span(startPosition, endPosition), Scheme(vars.map { it.value }, ty.value))
+    }
+
+
+    fun parseTypeDeclaration(): Declaration.Type {
+        val startPosition = iterator.next().span.start
+        val name = parseName()
+        expectNext<Token.LBrace>(expectedError("expected open brace"))
+
+        val ds = mutableListOf<DataConstructor>()
+        var endPosition = startPosition
+
+        while (true) {
+            ds += parseDataConstructor()
+            val peeked = iterator.peek()
+
+            if (peeked.value == Token.RBrace) {
+                endPosition = peeked.span.end
+                iterator.next()
+                break
+            }
+        }
+
+        return Declaration.Type(name, ds, Span(startPosition, endPosition))
+    }
+
+    fun parseDataConstructor(): DataConstructor {
+        val name = parseName()
+        val fields = mutableListOf<Type>()
+
+        var endPos = name.span.start
+
+        expectNext<Token.LParen>(expectedError("expected left paren"))
+        while (true) {
+            if (iterator.peek().value == Token.RParen) {
+                endPos = iterator.next().span.end
+                break
+            }
+
+            fields += parseType().value
+            expectNext<Token.Comma>(expectedError("expected comma")) // TODO end with )
+        }
+
+        return DataConstructor(name.value, fields, Span(name.span.start, endPos))
+    }
+
+
     fun parseType(): Spanned<Type> {
         val arg = parseTypeAtom()
         return when (iterator.peek()?.value) {
-            is Arrow -> {
+            is Token.Arrow -> {
                 iterator.next()
                 val res = parseType()
                 Spanned(Span(arg.span.start, res.span.end), Type.Fun(arg, res))
@@ -23,25 +126,23 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         val (start, token) = iterator.peek() ?: throw RuntimeException("Saw EOF, expected type")
 
         return when (token) {
-            is LParen -> {
+            is Token.LParen -> {
                 iterator.next()
 
                 val (_, type) = parseType()
-                val (end, _) = expectNext<LParen> { token ->
+                val (end, _) = expectNext<Token.LParen> { token ->
                     "missing closing paren saw ${token?.value} at ${token?.span}"
                 }
 
                 Spanned(Span(start.start, end.end), type)
             }
-            is Ident -> {
-                val (_, ident) = expectNext<Ident> { token ->
-                    "expected identifier saw ${token?.value} at ${token?.span}"
-                }
+            is Token.Ident -> {
+                val (_, name) = parseName()
 
-                val type = when (ident.ident) {
+                val type = when (name.value) {
                     "Int" -> Type.Int
                     "Bool" -> Type.Bool
-                    else -> Type.Var(ident)
+                    else -> Type.Var(name)
                 }
 
                 Spanned(start, type)
@@ -50,22 +151,25 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         }
     }
 
+    fun parseName(): Spanned<Name> {
+        val ident = expectNext<Token.Ident>(expectedError("expected identifier"))
+        return Spanned(ident.span, Name(ident.value.ident))
+    }
+
     fun parseVar(): Spanned<Expression.Var> {
-        val (span, ident) = expectNext<Ident> { token ->
-            "expected identifier saw ${token?.value} at ${token?.span}"
-        }
+        val (span, ident) = parseName()
         return Spanned(span, Expression.Var(ident))
     }
 
     fun parseInt(): Spanned<Expression.Literal> {
-        val (span, intToken) = expectNext<IntToken> { token ->
+        val (span, intToken) = expectNext<Token.IntToken> { token ->
             "expected int literal saw $token"
         }
         return Spanned(span, Expression.Literal(IntLit(intToken.int)))
     }
 
     fun parseBool(): Spanned<Expression.Literal> {
-        val (span, boolToken) = expectNext<BoolToken> { token ->
+        val (span, boolToken) = expectNext<Token.BoolToken> { token ->
             "expected boolean literal saw $token"
         }
         return Spanned(span, Expression.Literal(BoolLit(boolToken.bool)))
@@ -73,15 +177,12 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
 
 
     fun parseLambda(): Spanned<Expression.Lambda> {
-        val (start, _) = expectNext<Lam> { token ->
+        val (start, _) = expectNext<Token.Lam> { token ->
             "expected lambda saw $token"
         }
 
-        val binder = expectNext<Ident> { token ->
-            "expected identifier saw ${token?.value} at ${token?.span}"
-        }
-
-        expectNext<Dot> { token ->
+        val binder = parseName()
+        expectNext<Token.Dot> { token ->
             "expected dot saw ${token?.value} at ${token?.span}"
         }
 
@@ -111,40 +212,36 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
 
     private fun parseAtom(): Spanned<Expression>? {
         return when (iterator.peek().value) {
-            is LParen -> {
+            is Token.LParen -> {
                 val (start, _) = iterator.next()
                 var (exprSpan, expr) = parseExpression()
-                if (iterator.peek().value == Colon) {
+                if (iterator.peek().value == Token.Colon) {
                     iterator.next()
                     val ty = parseType()
                     expr = Expression.Typed(Spanned(exprSpan, expr), ty)
                 }
-                val (end, _) = expectNext<RParen> { token ->
+                val (end, _) = expectNext<Token.RParen> { token ->
                     "missing closing paren saw ${token?.value} at ${token?.span}"
                 }
 
                 Spanned(Span(start.start, end.end), expr)
             }
-            is Lam -> parseLambda()
-            is Ident -> parseVar()
-            is IntToken -> parseInt()
-            is BoolToken -> parseBool()
-            is Let -> parseLet()
-            is If -> parseIf()
+            is Token.Lam -> parseLambda()
+            is Token.Ident -> parseVar()
+            is Token.IntToken -> parseInt()
+            is Token.BoolToken -> parseBool()
+            is Token.Let -> parseLet()
+            is Token.If -> parseIf()
             else -> null
         }
     }
 
-    private fun expectedError(msg: String): (Spanned<Token>?) -> String = { token ->
-        "$msg saw ${token?.value} at ${token?.span}"
-    }
-
     private fun parseLet(): Spanned<Expression.Let>? {
         val (letSpan, _) = iterator.next()
-        val binder = expectNext<Ident>(expectedError("expected binder"))
-        expectNext<Equals>(expectedError("expected equals"))
+        val binder = parseName()
+        expectNext<Token.Equals>(expectedError("expected equals"))
         val expr = parseExpression()
-        expectNext<In>(expectedError("expected in"))
+        expectNext<Token.In>(expectedError("expected in"))
         val body = parseExpression()
 
         return Spanned(Span(letSpan.start, body.span.end), Expression.Let(binder, expr, body))
@@ -153,12 +250,16 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     private fun parseIf(): Spanned<Expression.If>? { // if true then 3 else 4
         val (ifSpan, _) = iterator.next()
         val condition = parseExpression()
-        expectNext<Then>(expectedError("expected then"))
+        expectNext<Token.Then>(expectedError("expected then"))
         val thenBranch = parseExpression()
-        expectNext<Else>(expectedError("expected else"))
+        expectNext<Token.Else>(expectedError("expected else"))
         val elseBranch = parseExpression()
 
         return Spanned(Span(ifSpan.start, elseBranch.span.end), Expression.If(condition, thenBranch, elseBranch))
+    }
+
+    private fun expectedError(msg: String): (Spanned<Token>?) -> String = { token ->
+        "$msg saw ${token?.value} at ${token?.span}"
     }
 
     private fun <T> expectNext(error: (token: Spanned<Token>?) -> String): Spanned<T> {

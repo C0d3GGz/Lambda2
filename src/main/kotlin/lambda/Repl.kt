@@ -1,25 +1,30 @@
 package lambda
 
 import java.io.File
-import java.nio.file.*
+import java.nio.file.FileSystems
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardWatchEventKinds
 
 fun runFile(file: File) {
-    file.readText().split(";").filter { it.isNotBlank() }.forEach {
+    try {
+        val sf = Parser(Lexer(file.readText())).parseSourceFile()
+        sf.valueDeclarations().forEach { dec ->
+            val expr = dec.expr
+            println("Typechecking: ${expr.value.pretty()}")
             try {
-                val expr = Parser(Lexer(it)).parseExpression()
-                println("Typechecking: ${expr.value.pretty()}")
-                try {
-                    val ty = Typechecker().inferExpr(expr)
-                    println("Inferred: ${ty.pretty()}")
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                println("Evaluating: ${expr.value.pretty()}")
-                val result = evalExpr(expr.value)
-                println(result.pretty())
+                val ty = Typechecker().inferExpr(expr)
+                println("Inferred: ${ty.pretty()}")
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            println("Evaluating: ${expr.value.pretty()}")
+            val result = evalExpr(expr.value)
+            println(result.pretty())
+        }
+
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }
 

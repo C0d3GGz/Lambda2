@@ -5,11 +5,15 @@ import io.vavr.control.Either
 import io.vavr.control.Option
 import io.vavr.kotlin.hashMap
 import io.vavr.kotlin.hashSet
+import lambda.syntax.BoolLit
+import lambda.syntax.Expression
+import lambda.syntax.IntLit
+import lambda.syntax.Name
 
-typealias TCContext = HashMap<Ident, Scheme>
+typealias TCContext = HashMap<Name, Scheme>
 
-data class Substitution(val subst: HashMap<Ident, Type>) {
-    fun get(ident: Ident): Option<Type> = subst.get(ident)
+data class Substitution(val subst: HashMap<Name, Type>) {
+    fun get(name: Name): Option<Type> = subst.get(name)
 
     fun compose(that: Substitution): Substitution {
         return Substitution(that.subst.mapValues(::apply).merge(subst))
@@ -18,7 +22,7 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
     fun apply(type: Type): Type {
         return when (type) {
             Type.Int, Type.Bool, Type.ErrorSentinel -> type
-            is Type.Var -> get(type.ident).getOrElse(type)
+            is Type.Var -> get(type.name).getOrElse(type)
             is Type.Fun -> Type.Fun(apply(type.arg, ::apply), apply(type.result, ::apply))
         }
     }
@@ -63,40 +67,40 @@ data class Substitution(val subst: HashMap<Ident, Type>) {
 
 sealed class TypeError {
     data class Unification(val ty1: Type, val ty2: Type) : TypeError()
-    data class UnknownVar(val ident: Ident) : TypeError()
-    data class OccursCheck(val ident: Ident, val type: Type) : TypeError()
+    data class UnknownVar(val name: Name) : TypeError()
+    data class OccursCheck(val name: Name, val type: Type) : TypeError()
     data class IfCondition(val type: Type) : TypeError()
 
     fun pretty(): String = when (this) {
         is Unification -> "Failed to unify ${ty1.pretty()} with ${ty2.pretty()}"
-        is UnknownVar -> "Unknown var ${ident.ident}"
-        is OccursCheck -> "Failed to infer the infinite type ${ident.ident} ~ ${type.pretty()}"
+        is UnknownVar -> "Unknown var ${name.value}"
+        is OccursCheck -> "Failed to infer the infinite type ${name.value} ~ ${type.pretty()}"
         is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
     }
 }
 
 private val initialContext: TCContext = hashMap(
-    Ident("add") to Scheme(
+    Name("add") to Scheme(
         emptyList(),
         Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
     ),
-    Ident("sub") to Scheme(
+    Name("sub") to Scheme(
         emptyList(),
         Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
     ),
-    Ident("eq") to Scheme(
+    Name("eq") to Scheme(
         emptyList(),
         Type.Fun(
             Type.Int.withDummySpan(),
             Type.Fun(Type.Int.withDummySpan(), Type.Bool.withDummySpan()).withDummySpan()
         )
     ),
-    Ident("identity") to Scheme(
-        listOf(Ident("a")),
+    Name("identity") to Scheme(
+        listOf(Name("a")),
         Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan())
     ), // forall a. a -> a
-    Ident("fix") to Scheme(
-        listOf(Ident("a")),
+    Name("fix") to Scheme(
+        listOf(Name("a")),
         Type.Fun(
             Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan()).withDummySpan(),
             Type.v("a").withDummySpan()
@@ -111,7 +115,7 @@ class Typechecker {
 
     fun freshVar(): Type {
         fresh += 1
-        return Type.Var(Ident("u$fresh"))
+        return Type.Var(Name("u$fresh"))
     }
 
     fun reportError(error: TypeError, span: Span) {
@@ -126,9 +130,9 @@ class Typechecker {
     }
 
     fun generalize(type: Type, ctx: TCContext): Scheme { // TODO clean up names
-        val freeInCtx = ctx.values().map(Scheme::freeVars).foldLeft(hashSet<Ident>(), { a, b -> b.union(a) })
+        val freeInCtx = ctx.values().map(Scheme::freeVars).foldLeft(hashSet<Name>(), { a, b -> b.union(a) })
         val freeVars = type.freeVars().removeAll(freeInCtx)
-        /*val vars = ('a'..'z').take(freeVars.size()).map { Ident(it.toString()) } */
+        /*val vars = ('a'..'z').take(freeVars.size()).map { Name(it.toString()) } */
 
         return Scheme(freeVars.toJavaList(), type)
     }
@@ -155,10 +159,10 @@ class Typechecker {
     }
 
     private fun varBind(v: Type.Var, type: Type): Either<TypeError, Substitution> {
-        return if (type.freeVars().contains(v.ident))
-            Either.left(TypeError.OccursCheck(v.ident, type))
+        return if (type.freeVars().contains(v.name))
+            Either.left(TypeError.OccursCheck(v.name, type))
         else
-            Either.right(Substitution(hashMap(v.ident to type)))
+            Either.right(Substitution(hashMap(v.name to type)))
     }
 
     fun infer(ctx: TCContext, sexpr: Spanned<Expression>): Pair<Spanned<Expression.Typed>, Substitution> {
@@ -192,12 +196,12 @@ class Typechecker {
                     ).withSpan(span) to s
             }
             is Expression.Var -> {
-                val scheme = ctx.get(expr.ident)
+                val scheme = ctx.get(expr.name)
                 if (scheme.isDefined) {
                     val t = instantiate(scheme.get()).withDummySpan()
                     Expression.Typed(sexpr, t).withSpan(span) to Substitution.empty
                 } else {
-                    reportError(TypeError.UnknownVar(expr.ident), span)
+                    reportError(TypeError.UnknownVar(expr.name), span)
                     Expression.Typed(sexpr, errorSentinel).withSpan(span) to Substitution.empty
                 }
             }

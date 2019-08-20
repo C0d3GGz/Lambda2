@@ -1,6 +1,7 @@
 package lambda
 
 import io.vavr.kotlin.hashMap
+import lambda.syntax.Name
 import org.junit.Test
 
 import org.junit.Assert.*
@@ -11,24 +12,24 @@ class SubstitutionTest {
     fun `should leave unknown vars untouched`() {
         val substitution = Substitution(
             hashMap(
-                Ident("a") to Type.Int
+                Name("a") to Type.Int
             )
         )
 
-        val result = substitution.apply(Type.Var(Ident("b")))
+        val result = substitution.apply(Type.Var(Name("b")))
 
-        assertEquals(Type.Var(Ident("b")), result)
+        assertEquals(Type.Var(Name("b")), result)
     }
 
     @Test
     fun `should substitute a known var to int`() {
         val substitution = Substitution(
             hashMap(
-                Ident("a") to Type.Int
+                Name("a") to Type.Int
             )
         )
 
-        val result = substitution.apply(Type.Var(Ident("a")))
+        val result = substitution.apply(Type.Var(Name("a")))
 
         assertEquals(Type.Int, result)
     }
@@ -37,15 +38,15 @@ class SubstitutionTest {
     fun `should substitute a function`() {
         val substitution = Substitution(
             hashMap(
-                Ident("a") to Type.Int,
-                Ident("b") to Type.Bool
+                Name("a") to Type.Int,
+                Name("b") to Type.Bool
             )
         )
 
         val result = substitution.apply(
             Type.Fun(
-                Type.Var(Ident("a")).withDummySpan(),
-                Type.Var(Ident("b")).withDummySpan()
+                Type.Var(Name("a")).withDummySpan(),
+                Type.Var(Name("b")).withDummySpan()
             )
         )
 
@@ -55,7 +56,7 @@ class SubstitutionTest {
     @Test
     fun `treat the empty substitution as identity`() {
         val empty = Substitution.empty
-        val substitution = Substitution(hashMap(Ident("a") to Type.Int))
+        val substitution = Substitution(hashMap(Name("a") to Type.Int))
 
         assertEquals(
             substitution,
@@ -71,17 +72,17 @@ class SubstitutionTest {
     @Test
     fun `compose should transitively apply substitutions`() {
         val first = Substitution(hashMap(
-            Ident("b") to Type.Int
+            Name("b") to Type.Int
         ))
 
         val second = Substitution(hashMap(
-            Ident("a") to Type.v("b")
+            Name("a") to Type.v("b")
         ))
 
         assertEquals(
             Substitution(hashMap(
-                Ident("a") to Type.Int,
-                Ident("b") to Type.Int
+                Name("a") to Type.Int,
+                Name("b") to Type.Int
             )),
             first.compose(second)
         )
@@ -90,16 +91,16 @@ class SubstitutionTest {
     @Test
     fun `compose should merge right-biased`(){
         val first = Substitution(hashMap(
-            Ident("b") to Type.Int
+            Name("b") to Type.Int
         ))
 
         val second = Substitution(hashMap(
-            Ident("b") to Type.Bool
+            Name("b") to Type.Bool
         ))
 
         assertEquals(
             Substitution(hashMap(
-                Ident("b") to Type.Bool
+                Name("b") to Type.Bool
             )),
             first.compose(second)
         )

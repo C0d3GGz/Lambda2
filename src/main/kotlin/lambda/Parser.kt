@@ -250,7 +250,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         "$msg saw ${token.value} at ${token.span}"
     }
 
-    private fun <T> expectNext(error: (token: Spanned<Token>) -> String): Spanned<T> {
+    private inline fun <reified T> expectNext(error: (token: Spanned<Token>) -> String): Spanned<T> {
         val (span, token) = iterator.next()
 
         get<T>(token)?.let {

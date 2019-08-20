@@ -5,8 +5,7 @@ sealed class Token {
     override fun toString(): String = this.javaClass.simpleName
 
     companion object {
-        @Suppress("UNCHECKED_CAST")
-        fun <T> get(token: Token): T? {
+        inline fun <reified T> get(token: Token): T? {
             return token as? T
         }
     }

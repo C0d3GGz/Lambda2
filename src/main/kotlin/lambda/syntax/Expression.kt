@@ -26,7 +26,7 @@ sealed class Expression {
         val elseBranch: Spanned<Expression>
     ) : Expression()
 
-    data class Constructor(val type: Spanned<Name>, val dtor: Spanned<Name>, val exprs: List<Spanned<Expression>>) :
+    data class Construction(val type: Spanned<Name>, val dtor: Spanned<Name>, val exprs: List<Spanned<Expression>>) :
         Expression()
 
     open fun withSpan(span: Span) = Spanned(span, this)

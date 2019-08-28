@@ -27,8 +27,8 @@ private object Pretty {
                 "let ${expr.binder.value.value} = ${expr.expr.value.pretty()} in ${expr.body.value.pretty()}"
             is Expression.If ->
                 "if ${expr.condition.value.pretty()} then ${expr.thenBranch.value.pretty()} else ${expr.elseBranch.value.pretty()}"
-            is Expression.Constructor ->
-                "${expr.type.value.value}::${expr.dtor.value.value}(${expr.exprs.joinToString(",") { it.value.pretty() }})"
+            is Expression.Construction ->
+                "${expr.type.value.value}::${expr.dtor.value.value}(${expr.exprs.joinToString(", ") { it.value.pretty() }})"
         }
     }
 
@@ -56,7 +56,10 @@ private object Pretty {
                 val output = "${prettyPrintRTExpr(expr.func, depth)} ${prettyPrintRTExpr(expr.arg, depth + 1)}"
                 return if (depth > 0) "($output)" else output
             }
-            is RTExpression.If -> "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
+            is RTExpression.If ->
+                "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
+            is RTExpression.Pack ->
+                "Pack { tag: ${expr.tag}, arity: ${expr.arity}, data: [${expr.data.joinToString(", ") { it.pretty() }}]}"
         }
     }
 

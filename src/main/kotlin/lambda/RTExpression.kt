@@ -14,30 +14,10 @@ sealed class RTExpression {
     data class App(val func: RTExpression, val arg: RTExpression) : RTExpression()
     data class If(val condition: RTExpression, val thenBranch: RTExpression, val elseBranch: RTExpression) :
         RTExpression()
-}
 
-fun fromExpr(expr: Expression): RTExpression {
-    return when (expr) {
-        is Expression.Literal -> RTExpression.Literal(expr.lit)
-        is Expression.Var -> RTExpression.Var(expr.name)
-        is Expression.Lambda -> RTExpression.Lambda(expr.binder.value, fromExpr(expr.body.value))
-        is Expression.App -> RTExpression.App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
-        is Expression.Typed -> fromExpr(expr.expr.value)
-        is Expression.Let -> {
-            // let x = 4 in add x 5
-            // (\x. add x 5) 4
-
-            RTExpression.App(
-                RTExpression.Lambda(expr.binder.value, fromExpr(expr.body.value)),
-                fromExpr(expr.expr.value)
-            )
-        }
-        is Expression.If -> RTExpression.If(
-            fromExpr(expr.condition.value),
-            fromExpr(expr.thenBranch.value),
-            fromExpr(expr.elseBranch.value)
-        )
-        is Expression.Constructor -> TODO()
+    data class Pack(val tag: Int, val data: List<RTExpression>): RTExpression() {
+        val arity: Int
+            get() = data.size
     }
 }
 
@@ -87,6 +67,14 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                         )
                     )
                 }
+                Name("#head") -> {
+                    val pack = ctx.get(Name("x")).get() as RTExpression.Pack
+                    pack.data.first()
+                }
+                Name("#tail") -> {
+                    val pack = ctx.get(Name("x")).get() as RTExpression.Pack
+                    pack.data.last()
+                }
                 else -> {
                     val res = ctx.get(expr.name)
                     return res.getOrElseThrow { EvalException("${expr.name} was undefined.") }
@@ -114,10 +102,14 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 throw EvalException("$evalCondition is not a bool.")
             }
         }
+        is RTExpression.Pack -> RTExpression.Pack(
+            expr.tag,
+            expr.data.map { eval(ctx, it) }
+        )
     }
 }
 
-fun evalExpr(expr: Expression): RTExpression {
+fun evalExpr(expr: RTExpression): RTExpression {
     val primAdd: RTExpression =
         RTExpression.Closure(
             Name("x"),
@@ -145,6 +137,20 @@ fun evalExpr(expr: Expression): RTExpression {
                 Name("y"),
                 RTExpression.Var(Name("#eq"))
             ),
+            hashMap()
+        )
+
+    val primHead: RTExpression =
+        RTExpression.Closure(
+            Name("x"),
+            RTExpression.Var(Name("#head")),
+            hashMap()
+        )
+
+    val primTail: RTExpression =
+        RTExpression.Closure(
+            Name("x"),
+            RTExpression.Var(Name("#tail")),
             hashMap()
         )
 
@@ -181,9 +187,11 @@ fun evalExpr(expr: Expression): RTExpression {
         Name("add") to primAdd,
         Name("sub") to primSub,
         Name("eq") to primEq,
-        Name("fix") to z
+        Name("fix") to z,
+        Name("head") to primHead,
+        Name("tail") to primTail
     )
-    return eval(initialContext, fromExpr(expr))
+    return eval(initialContext, expr)
 }
 
 class EvalException(s: String) : Exception(s) {}

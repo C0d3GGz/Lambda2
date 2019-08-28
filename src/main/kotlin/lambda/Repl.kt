@@ -9,6 +9,8 @@ import java.nio.file.StandardWatchEventKinds
 fun runFile(file: File) {
     try {
         val sf = Parser(Lexer(file.readText())).parseSourceFile()
+        val lowering = Lowering(sf.typeDeclarations())
+
         sf.valueDeclarations().forEach { dec ->
             val expr = dec.expr
             println("Typechecking: ${expr.value.pretty()}")
@@ -19,7 +21,7 @@ fun runFile(file: File) {
                 e.printStackTrace()
             }
             println("Evaluating: ${expr.value.pretty()}")
-            val result = evalExpr(expr.value)
+            val result = evalExpr(lowering.lower(expr.value))
             println(result.pretty())
         }
 

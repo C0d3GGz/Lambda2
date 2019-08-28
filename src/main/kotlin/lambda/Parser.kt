@@ -229,7 +229,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     }
 
     // Color::Red()
-    private fun parseDataConstruction(): Spanned<Expression.Constructor> {
+    private fun parseDataConstruction(): Spanned<Expression.Construction> {
         val type = parseUpperName("expected type name")
         expectNext<Token.DoubleColon>(expectedError("expected double colon"))
         val dtor = parseUpperName("expected data constructor")
@@ -248,7 +248,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             expectNext<Token.Comma>(expectedError("expected comma"))
         }
 
-        return Spanned(Span(type.span.start, endPos), Expression.Constructor(type, dtor, exprs))
+        return Spanned(Span(type.span.start, endPos), Expression.Construction(type, dtor, exprs))
     }
 
     private fun parseLet(): Spanned<Expression.Let> {
@@ -305,7 +305,8 @@ fun testEval(input: String) {
     val parser = Parser(Lexer(input))
     print("evaled: ")
     val parsed = parser.parseExpression()
-    println(evalExpr(parsed.value).pretty())
+    val lowering = Lowering(emptyList())
+    println(evalExpr(lowering.lower(parsed.value)).pretty())
 }
 
 fun testParse(input: String) {

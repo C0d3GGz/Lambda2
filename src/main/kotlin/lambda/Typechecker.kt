@@ -21,7 +21,7 @@ data class Substitution(val subst: HashMap<Name, Type>) {
 
     fun apply(type: Type): Type {
         return when (type) {
-            Type.Int, Type.Bool, Type.ErrorSentinel -> type
+            is Type.Constructor, Type.ErrorSentinel -> type
             is Type.Var -> get(type.name).getOrElse(type)
             is Type.Fun -> Type.Fun(apply(type.arg, ::apply), apply(type.result, ::apply))
         }
@@ -48,7 +48,7 @@ data class Substitution(val subst: HashMap<Name, Type>) {
                 apply(expr.thenBranch, ::apply),
                 apply(expr.elseBranch, ::apply)
             )
-            is Expression.Constructor -> TODO()
+            is Expression.Constructor -> expr.copy(exprs = expr.exprs.map { apply(it, ::apply) })
         }
     }
 

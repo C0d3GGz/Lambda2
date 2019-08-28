@@ -5,9 +5,8 @@ import io.vavr.kotlin.hashSet
 import lambda.syntax.Name
 
 sealed class Type {
-    object Int : Type()
-    object Bool : Type()
     object ErrorSentinel : Type()
+    data class Constructor(val name: Spanned<Name>) : Type()
     data class Var(val name: Name) : Type()
     data class Fun(val arg: Spanned<Type>, val result: Spanned<Type>) : Type()
 
@@ -15,7 +14,7 @@ sealed class Type {
 
     fun freeVars(): HashSet<Name> {
         return when (this) {
-            Int, Bool, ErrorSentinel -> hashSet()
+            is Constructor, ErrorSentinel -> hashSet()
             is Var -> hashSet(name)
             is Fun -> arg.value.freeVars().union(result.value.freeVars())
         }
@@ -25,6 +24,8 @@ sealed class Type {
 
     companion object {
         fun v(name: String) = Type.Var(Name(name))
+        val Int = Type.Constructor(Spanned(Span.DUMMY, Name("Int")))
+        val Bool = Type.Constructor(Spanned(Span.DUMMY, Name("Bool")))
     }
 }
 

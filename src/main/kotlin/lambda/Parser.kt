@@ -136,15 +136,8 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
                 Spanned(Span(start.start, end.end), type)
             }
             is Token.UpperIdent -> {
-                val (span, name) = parseUpperName()
-
-                val type = when (name.value) {
-                    "Int" -> Type.Int
-                    "Bool" -> Type.Bool
-                    else -> TODO("parse type constructors")
-                }
-
-                Spanned(span, type)
+                val name = parseUpperName()
+                Spanned(name.span, Type.Constructor(name))
             }
             is Token.Ident -> {
                 val (span, name) = parseName()

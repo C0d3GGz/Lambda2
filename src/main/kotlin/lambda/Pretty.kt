@@ -62,8 +62,7 @@ private object Pretty {
 
     fun prettyPrintType(type: Type, depth: Int): String {
         return when (type) {
-            Type.Int -> "Int"
-            Type.Bool -> "Bool"
+            is Type.Constructor -> type.name.value.value
             is Type.Var -> type.name.value
             is Type.Fun -> {
                 val output = "${prettyPrintType(type.arg.value, depth + 1)} -> ${prettyPrintType(type.result.value, 0)}"

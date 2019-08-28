@@ -23,8 +23,12 @@ private object Pretty {
                 return if (depth > 0) "($output)" else output
             }
             is Expression.Typed -> "(${expr.expr.value.pretty()} : ${expr.type.value.pretty()})"
-            is Expression.Let -> "let ${expr.binder.value.value} = ${expr.expr.value.pretty()} in ${expr.body.value.pretty()}"
-            is Expression.If -> "if ${expr.condition.value.pretty()} then ${expr.thenBranch.value.pretty()} else ${expr.elseBranch.value.pretty()}"
+            is Expression.Let ->
+                "let ${expr.binder.value.value} = ${expr.expr.value.pretty()} in ${expr.body.value.pretty()}"
+            is Expression.If ->
+                "if ${expr.condition.value.pretty()} then ${expr.thenBranch.value.pretty()} else ${expr.elseBranch.value.pretty()}"
+            is Expression.Constructor ->
+                "${expr.type.value.value}::${expr.dtor.value.value}(${expr.exprs.joinToString(",") { it.value.pretty() }})"
         }
     }
 
@@ -80,8 +84,8 @@ private object Pretty {
             is EvalExpression.Var -> expr.name.value
             is EvalExpression.Lambda -> "(\\${expr.binder.value}. ${expr.body.pretty()})"
             is EvalExpression.App -> {
-               val output = "${prettyPrintEvalExpr(expr.func, depth)} ${prettyPrintEvalExpr(expr.arg, depth + 1)}"
-               return if (depth > 0) "($output)" else output
+                val output = "${prettyPrintEvalExpr(expr.func, depth)} ${prettyPrintEvalExpr(expr.arg, depth + 1)}"
+                return if (depth > 0) "($output)" else output
             }
             is EvalExpression.Typed -> "(${expr.expr.pretty()} : ${expr.type.pretty()})"
             is EvalExpression.Let -> "let ${expr.binder.value} = ${expr.expr.pretty()} in ${expr.body.pretty()}"

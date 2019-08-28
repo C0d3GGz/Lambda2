@@ -19,9 +19,11 @@ sealed class Token {
     object Comma : Token()
     object Semicolon: Token()
     object Colon : Token()
+    object DoubleColon : Token()
     object Equals: Token()
     object Arrow : Token()
     data class Ident(val ident: String) : Token()
+    data class UpperIdent(val ident: String) : Token()
     data class IntToken(val int: Int) : Token()
     data class BoolToken(val bool: Boolean) : Token()
     object EOF : Token()
@@ -91,7 +93,14 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             '.' -> Dot to 1
             ';' -> Semicolon to 1
             ',' -> Comma to 1
-            ':' -> Colon to 1
+            ':' -> {
+                if (iterator.peek() == ':') {
+                    iterator.next()
+                    DoubleColon to 2
+                }
+                else
+                    Colon to 1
+            }
             '=' -> Equals to 1
             '-' -> if (iterator.next() == '>') Arrow to 2 else {
                 throw RuntimeException()
@@ -136,7 +145,8 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             "then" -> Then
             "else" -> Else
             "forall" -> Forall
-            else -> Ident(result)
+            "type" -> Token.Type
+            else -> if (startChar.isUpperCase()) UpperIdent(result) else Ident(result)
         } to result.length
     }
 }

@@ -48,6 +48,7 @@ data class Substitution(val subst: HashMap<Name, Type>) {
                 apply(expr.thenBranch, ::apply),
                 apply(expr.elseBranch, ::apply)
             )
+            is Expression.Constructor -> TODO()
         }
     }
 
@@ -299,6 +300,7 @@ class Typechecker {
                     )
                 ).withSpan(span) to s
             }
+            is Expression.Constructor -> TODO()
         }
     }
 

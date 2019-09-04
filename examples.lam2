@@ -1,34 +1,12 @@
-type Color {
-    Red(),
-    Green(Int, Bool,),
-}
-
-type ColorTuple {
-    T(Color, Color,),
-}
-
-type ColorList {
-    Cons(Color, ColorList,),
+type List {
+    Cons(Int, List,),
     Nil(),
 }
 
-type Unit {
-    T(),
-}
-
-let main: Color =
+let sum: Int -> Int =
   let sumr = \f. \x. if eq x 0 then 0 else add x (f (sub x 1)) in
-  let sum = fix sumr in
-  let green = Color::Green(sum 3, true,) in
-  let red = Color::Red() in
-  let cons = \c. \cs. ColorList::Cons(c, cs,) in
-  let nil = ColorList::Nil() in
-  
-  let map = \c. match c {
-    Color::Red() -> 1,
-    else -> 2
-  }
-  
-  let colorList = cons green (cons red nil) in
+  fix sumr;
 
-  head (tail colorList);
+let main: Int =
+  let l = List::Nil() in
+  head l;

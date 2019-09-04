@@ -1,7 +1,6 @@
 package lambda
 
 import io.vavr.collection.HashMap
-import io.vavr.control.Either
 import io.vavr.control.Option
 import io.vavr.kotlin.hashMap
 import io.vavr.kotlin.hashSet
@@ -66,50 +65,78 @@ data class Substitution(val subst: HashMap<Name, Type>) {
 sealed class TypeError {
     data class Unification(val ty1: Type, val ty2: Type) : TypeError()
     data class UnknownVar(val name: Name) : TypeError()
+    data class UnknownType(val name: Name) : TypeError()
+    data class UnknownDtor(val type: Name, val name: Name) : TypeError()
     data class OccursCheck(val name: Name, val type: Type) : TypeError()
     data class IfCondition(val type: Type) : TypeError()
 
     fun pretty(): String = when (this) {
         is Unification -> "Failed to unify ${ty1.pretty()} with ${ty2.pretty()}"
         is UnknownVar -> "Unknown var ${name.value}"
+        is UnknownType -> "Unknown type ${name.value}"
+        is UnknownDtor -> "Type ${type.value} does not have a constructor named ${name.value}"
         is OccursCheck -> "Failed to infer the infinite type ${name.value} ~ ${type.pretty()}"
         is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
     }
 }
 
-private val initialContext: TCContext = hashMap(
-    Name("add") to Scheme(
-        emptyList(),
-        Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
-    ),
-    Name("sub") to Scheme(
-        emptyList(),
-        Type.Fun(Type.Int.withDummySpan(), Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan())
-    ),
-    Name("eq") to Scheme(
-        emptyList(),
-        Type.Fun(
-            Type.Int.withDummySpan(),
-            Type.Fun(Type.Int.withDummySpan(), Type.Bool.withDummySpan()).withDummySpan()
+private val initialContext: TCContext
+    get() {
+        val list = Type.Constructor(Spanned(Span.DUMMY, Name("List"))).withDummySpan()
+
+        return hashMap(
+            Name("add") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.Int.withDummySpan(),
+                    Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan()
+                )
+            ),
+            Name("sub") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.Int.withDummySpan(),
+                    Type.Fun(Type.Int.withDummySpan(), Type.Int.withDummySpan()).withDummySpan()
+                )
+            ),
+            Name("eq") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.Int.withDummySpan(),
+                    Type.Fun(Type.Int.withDummySpan(), Type.Bool.withDummySpan()).withDummySpan()
+                )
+            ),
+            Name("identity") to Scheme(
+                listOf(Name("a")),
+                Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan())
+            ), // forall a. a -> a
+            Name("fix") to Scheme(
+                listOf(Name("a")),
+                Type.Fun(
+                    Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan()).withDummySpan(),
+                    Type.v("a").withDummySpan()
+                )
+            ), // forall a. (a -> a) -> a
+            Name("head") to Scheme(
+                emptyList(),
+                Type.Fun(list, Type.Int.withDummySpan())
+            ), // List -> Int
+            Name("tail") to Scheme(
+                emptyList(),
+                Type.Fun(list, list)
+            ) // List -> List
         )
-    ),
-    Name("identity") to Scheme(
-        listOf(Name("a")),
-        Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan())
-    ), // forall a. a -> a
-    Name("fix") to Scheme(
-        listOf(Name("a")),
-        Type.Fun(
-            Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan()).withDummySpan(),
-            Type.v("a").withDummySpan()
-        )
-    ) // forall a. (a -> a) -> a
-)
+    }
 
 class Typechecker {
 
     var fresh: Int = 0
     var errors = mutableListOf<Spanned<TypeError>>()
+
+    val types: MutableMap<Name, List<DataConstructor>> = mutableMapOf(
+        Name("Int") to emptyList(),
+        Name("Bool") to emptyList()
+    )
 
     fun freshVar(): Type {
         fresh += 1
@@ -140,7 +167,7 @@ class Typechecker {
         val t2 = st2.value
 
         return if (t1 == t2)
-            Either.right(Substitution.empty)
+            Either.Right(Substitution.empty)
         else if (t1 is Type.Var)
             varBind(t1, t2)
         else if (t2 is Type.Var)
@@ -152,15 +179,15 @@ class Typechecker {
                 }
             }
         } else {
-            Either.left(TypeError.Unification(t1, t2) as TypeError)
+            Either.Left(TypeError.Unification(t1, t2) as TypeError)
         }
     }
 
     private fun varBind(v: Type.Var, type: Type): Either<TypeError, Substitution> {
         return if (type.freeVars().contains(v.name))
-            Either.left(TypeError.OccursCheck(v.name, type))
+            Either.Left(TypeError.OccursCheck(v.name, type))
         else
-            Either.right(Substitution(hashMap(v.name to type)))
+            Either.Right(Substitution(hashMap(v.name to type)))
     }
 
     fun infer(ctx: TCContext, sexpr: Spanned<Expression>): Pair<Spanned<Expression.Typed>, Substitution> {
@@ -214,18 +241,25 @@ class Typechecker {
                         errorSentinel
                     ).withSpan(span) to Substitution.empty
                 } else {
-                    val s3 =
-                        unify(s2.apply(func.value.type, s2::apply), Type.Fun(arg.value.type, tyRes).withDummySpan())
-                    s3.fold({ err ->
-                        reportError(err, arg.span)
-                        Expression.Typed(
-                            Expression.App(func, arg).withSpan(span),
-                            errorSentinel
-                        ).withSpan(span) to Substitution.empty
-                    }, { s3 ->
-                        val s = s3.compose(s2).compose(s1)
-                        s.apply(Expression.Typed(Expression.App(func, arg).withSpan(span), tyRes)).withSpan(span) to s
-                    })
+                    when (val res =
+                        unify(s2.apply(func.value.type, s2::apply), Type.Fun(arg.value.type, tyRes).withDummySpan())) {
+                        is Either.Left -> {
+                            reportError(res.value, arg.span)
+                            Expression.Typed(
+                                Expression.App(func, arg).withSpan(span),
+                                errorSentinel
+                            ).withSpan(span) to Substitution.empty
+                        }
+                        is Either.Right -> {
+                            val s = res.value.compose(s2).compose(s1)
+                            s.apply(
+                                Expression.Typed(
+                                    Expression.App(func, arg).withSpan(span),
+                                    tyRes
+                                )
+                            ).withSpan(span) to s
+                        }
+                    }
                 }
             }
             is Expression.Typed -> {
@@ -233,16 +267,19 @@ class Typechecker {
                 if (tyExpr.value.type.value.isError()) {
                     Expression.Typed(tyExpr, errorSentinel).withSpan(span) to Substitution.empty
                 } else {
-                    if (!expr.type.value.freeVars().isEmpty) {
+                    if (!expr.type.value.freeVars().isEmpty) { // TODO check wellformedness
                         throw RuntimeException("not allowed")
                     }
-                    val s2 = unify(tyExpr.value.type, expr.type)
-                    s2.fold({ err ->
-                        reportError(err, span)
-                        Expression.Typed(tyExpr, errorSentinel).withSpan(span) to Substitution.empty
-                    }, { s2 ->
-                        s2.apply(tyExpr, s2::apply) to s2.compose(s)
-                    })
+                    when (val res = unify(tyExpr.value.type, expr.type)) {
+                        is Either.Left -> {
+                            reportError(res.value, span)
+                            Expression.Typed(tyExpr, errorSentinel).withSpan(span) to Substitution.empty
+                        }
+                        is Either.Right -> {
+                            val s2 = res.value
+                            s2.apply(tyExpr, s2::apply) to s2.compose(s)
+                        }
+                    }
                 }
             }
             is Expression.Let -> {
@@ -264,24 +301,27 @@ class Typechecker {
                 var hasError = false
                 val (tyCond, s1) = infer(ctx, expr.condition)
 
-                val s2 = unify(tyCond.value.type, Type.Bool.withDummySpan()).fold(
-                    {
+                val s2 = when (val res = unify(tyCond.value.type, Type.Bool.withDummySpan())) {
+                    is Either.Left -> {
                         reportError(TypeError.IfCondition(tyCond.value.type.value), expr.condition.span)
                         hasError = true
                         Substitution.empty
-                    },
-                    { s -> s }
-                )
+                    }
+                    is Either.Right -> res.value
+                }
 
                 val ctx = s2.apply(s1.apply(ctx))
                 val (tyThen, s3) = infer(ctx, expr.thenBranch)
                 val (tyElse, s4) = infer(s3.apply(ctx), expr.elseBranch)
 
-                val s5 = unify(s4.apply(tyThen.value.type, s4::apply), tyElse.value.type).fold({ err ->
-                    reportError(err, span)
-                    hasError = true
-                    Substitution.empty
-                }, { s -> s })
+                val s5 = when (val res = unify(s4.apply(tyThen.value.type, s4::apply), tyElse.value.type)) {
+                    is Either.Left -> {
+                        reportError(res.value, span)
+                        hasError = true
+                        Substitution.empty
+                    }
+                    is Either.Right -> res.value
+                }
 
                 val s = s5.compose(s4).compose(s3).compose(s2).compose(s1)
 
@@ -297,9 +337,53 @@ class Typechecker {
                     )
                 ).withSpan(span) to s
             }
-            is Expression.Construction -> // TODO
-                Expression.Typed(expr.withSpan(span), errorSentinel).withSpan(span) to Substitution.empty
+
+            is Expression.Construction -> when (val res = lookupDtor(expr.type.value, expr.dtor.value)) {
+                is Either.Left -> {
+                    reportError(res.value, Span(expr.type.span.start, expr.dtor.span.end))
+                    Expression.Typed(expr.withSpan(span), errorSentinel).withSpan(span) to Substitution.empty
+                }
+                is Either.Right -> {
+                    val fields = res.value
+                    var hasError = false
+                    var typedFields = mutableListOf<Spanned<Expression.Typed>>()
+                    var s = Substitution.empty
+
+                    expr.exprs.zip(fields).forEach { (e, f) ->
+                        val (t, s1) = infer(ctx, s.apply(e, s::apply))
+
+                        when (val res = unify(t.value.type, f.withDummySpan())) {
+                            is Either.Left -> {
+                                reportError(res.value, e.span)
+                                hasError = true
+                                typedFields.add(t)
+                            }
+                            is Either.Right -> {
+                                s = res.value.compose(s1).compose(s)
+                                typedFields.add(s.apply(t, s::apply))
+                            }
+                        }
+                    }
+
+                    val type = if (hasError) {
+                        errorSentinel
+                    } else {
+                        Type.Constructor(expr.type).withDummySpan()
+                    }
+
+                    Expression.Typed(
+                        Expression.Construction(expr.type, expr.dtor, typedFields).withSpan(span),
+                        type
+                    ).withSpan(span) to s
+                }
+            }
         }
+    }
+
+    fun lookupDtor(type: Name, dtor: Name): Either<TypeError, List<Type>> {
+        val dtors = types[type] ?: return Either.Left(TypeError.UnknownType(type))
+        val dc = dtors.find { it.name == dtor } ?: return Either.Left(TypeError.UnknownDtor(type, dtor))
+        return Either.Right(dc.fields)
     }
 
     fun inferExpr(expr: Spanned<Expression>): Scheme {
@@ -317,7 +401,11 @@ class Typechecker {
 
     fun inferSourceFile(file: SourceFile): HashMap<Name, Scheme> {
         var ctx = initialContext
-        file.typeDeclarations().forEach {  }
+
+        file.typeDeclarations().forEach {
+            types.putIfAbsent(it.name.value, it.dataConstructors)
+        }
+
         file.valueDeclarations().forEach {
             val (t, s) = this.infer(ctx, it.expr)
             // TODO compare user scheme with inferred scheme

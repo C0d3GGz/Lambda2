@@ -3,7 +3,7 @@ type List {
     Nil(),
 }
 
-let map : Int =
+let map : (Int -> Int) -> List -> List =
   \f.
     let mapr =
       \mapr. \xs.
@@ -15,6 +15,7 @@ let map : Int =
 let sum: Int -> Int =
   let sumr = \f. \x. if eq x 0 then 0 else add x (f (sub x 1)) in
   fix sumr;
+
 
 let main: Int =
   let cons = \x. \xs. List::Cons(x, xs,) in

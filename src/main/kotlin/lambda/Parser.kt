@@ -131,7 +131,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
                 iterator.next()
 
                 val (_, type) = parseType()
-                val (end, _) = expectNext<Token.LParen>(expectedError("missing closing paren"))
+                val (end, _) = expectNext<Token.RParen>(expectedError("missing closing paren"))
 
                 Spanned(Span(start.start, end.end), type)
             }

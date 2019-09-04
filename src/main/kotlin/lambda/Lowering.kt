@@ -1,17 +1,15 @@
 package lambda
 
 import lambda.syntax.DataConstructor
-import lambda.syntax.Declaration
 import lambda.syntax.Expression
 import lambda.syntax.Name
+import lambda.syntax.SourceFile
 
-class Lowering(typeDeclarations: List<Declaration.Type>) {
+class Lowering() {
 
-    private val table: Map<Name, List<DataConstructor>> = typeDeclarations
-        .map { type -> type.name.value to type.dataConstructors }
-        .toMap()
+    private var table: Map<Name, List<DataConstructor>> = emptyMap()
 
-    fun lower(expr: Expression): RTExpression {
+    private fun lower(expr: Expression): RTExpression {
         return when (expr) {
             is Expression.Literal -> RTExpression.Literal(expr.lit)
             is Expression.Var -> RTExpression.Var(expr.name)
@@ -43,6 +41,14 @@ class Lowering(typeDeclarations: List<Declaration.Type>) {
                 expr.exprs.map { lower(it.value) }
             )
         }
+    }
+
+    fun lowerSourceFile(sf: SourceFile): List<Pair<Name, RTExpression>> {
+        table = sf.typeDeclarations()
+            .map { type -> type.name.value to type.dataConstructors }
+            .toMap()
+
+        return sf.valueDeclarations().map { it.name.value to lower(it.expr.value) }
     }
 }
 

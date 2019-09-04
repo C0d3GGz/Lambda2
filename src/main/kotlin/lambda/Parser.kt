@@ -285,34 +285,3 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         } ?: throw RuntimeException(error(Spanned(span, token)))
     }
 }
-
-fun main(args: Array<String>) {
-    testParse("(\\x. x) y")
-    testParse("(\\x. x y)")
-    testParse("(\\y. \\x. x y) x")
-    testParse("(\\y. \\x. x y) z (\\k. k)")
-    testEval("(\\y. (\\x. y)) 2 1")
-    testParse("(\\y. (\\x. y)) 2 1")
-    testEval("(\\f. \\g. add (f 1) (g 2)) (add 10) (add 5)")
-    testEval("add 1 2")
-    testEval("add 1 (add 1 2)")
-    testEval("add (add 4 1) (add 1 2)")
-    testEval("(\\f. add (f 1) (f 2)) (add 10)")
-}
-
-fun testEval(input: String) {
-    println("input: $input")
-    val parser = Parser(Lexer(input))
-    print("evaled: ")
-    val parsed = parser.parseExpression()
-    val lowering = Lowering(emptyList())
-    println(evalExpr(lowering.lower(parsed.value)).pretty())
-}
-
-fun testParse(input: String) {
-    println("input: $input")
-    val parser = Parser(Lexer(input))
-    print("evaled: ")
-    val parsed = parser.parseExpression()
-    println(Eval().eval(EvalExpression.fromExpr(parsed.value)).pretty())
-}

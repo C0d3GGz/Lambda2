@@ -9,22 +9,22 @@ import java.nio.file.StandardWatchEventKinds
 fun runFile(file: File) {
     try {
         val sf = Parser(Lexer(file.readText())).parseSourceFile()
-        val lowering = Lowering(sf.typeDeclarations())
 
-        sf.valueDeclarations().forEach { dec ->
-            val expr = dec.expr
-            println("Typechecking: ${expr.value.pretty()}")
-            try {
-                val ty = Typechecker().inferExpr(expr)
-                println("Inferred: ${ty.pretty()}")
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            println("Evaluating: ${expr.value.pretty()}")
-            val result = evalExpr(lowering.lower(expr.value))
-            println(result.pretty())
+        try {
+            println("Typechecking: sf") // TODO pretty for SourceFile
+            Typechecker().inferSourceFile(sf).forEach { println("${it._1.value} : ${it._2.pretty()}") }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
 
+        try {
+            val loweredExprs = Lowering().lowerSourceFile(sf)
+            loweredExprs.forEach { println("Evaluating ${it.first.value} = ${it.second.pretty()}") }
+            val result = evalExprs(loweredExprs)
+            println(result.pretty())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     } catch (e: Exception) {
         e.printStackTrace()
     }

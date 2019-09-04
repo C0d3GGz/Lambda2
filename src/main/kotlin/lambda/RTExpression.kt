@@ -2,7 +2,10 @@ package lambda
 
 import io.vavr.collection.HashMap
 import io.vavr.kotlin.hashMap
-import lambda.syntax.*
+import lambda.syntax.BoolLit
+import lambda.syntax.IntLit
+import lambda.syntax.Lit
+import lambda.syntax.Name
 
 typealias Context = HashMap<Name, RTExpression>
 
@@ -15,7 +18,7 @@ sealed class RTExpression {
     data class If(val condition: RTExpression, val thenBranch: RTExpression, val elseBranch: RTExpression) :
         RTExpression()
 
-    data class Pack(val tag: Int, val data: List<RTExpression>): RTExpression() {
+    data class Pack(val tag: Int, val data: List<RTExpression>) : RTExpression() {
         val arity: Int
             get() = data.size
     }
@@ -109,7 +112,24 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
     }
 }
 
+fun evalExprs(exprs: List<Pair<Name, RTExpression>>): RTExpression {
+    var ctx = initialContext()
+    var result: RTExpression = RTExpression.Var(Name("empty source file"))
+
+    exprs.forEach {
+        result = eval(ctx, it.second)
+        ctx = ctx.put(it.first, result)
+    }
+
+    return result
+}
+
 fun evalExpr(expr: RTExpression): RTExpression {
+    return eval(initialContext(), expr)
+}
+
+
+private fun initialContext(): Context {
     val primAdd: RTExpression =
         RTExpression.Closure(
             Name("x"),
@@ -183,7 +203,7 @@ fun evalExpr(expr: RTExpression): RTExpression {
             hashMap()
         )
 
-    val initialContext: Context = hashMap(
+    return hashMap(
         Name("add") to primAdd,
         Name("sub") to primSub,
         Name("eq") to primEq,
@@ -191,7 +211,6 @@ fun evalExpr(expr: RTExpression): RTExpression {
         Name("head") to primHead,
         Name("tail") to primTail
     )
-    return eval(initialContext, expr)
 }
 
 class EvalException(s: String) : Exception(s) {}

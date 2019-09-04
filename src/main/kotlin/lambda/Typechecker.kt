@@ -5,10 +5,7 @@ import io.vavr.control.Either
 import io.vavr.control.Option
 import io.vavr.kotlin.hashMap
 import io.vavr.kotlin.hashSet
-import lambda.syntax.BoolLit
-import lambda.syntax.Expression
-import lambda.syntax.IntLit
-import lambda.syntax.Name
+import lambda.syntax.*
 
 typealias TCContext = HashMap<Name, Scheme>
 
@@ -300,7 +297,8 @@ class Typechecker {
                     )
                 ).withSpan(span) to s
             }
-            is Expression.Construction -> Expression.Typed(expr.withSpan(span), errorSentinel).withSpan(span) to Substitution.empty
+            is Expression.Construction -> // TODO
+                Expression.Typed(expr.withSpan(span), errorSentinel).withSpan(span) to Substitution.empty
         }
     }
 
@@ -315,5 +313,27 @@ class Typechecker {
         }
         println("inferred AST: ${t.value.pretty()}")
         return generalize(s.apply(t.value.type.value), initialContext)
+    }
+
+    fun inferSourceFile(file: SourceFile): HashMap<Name, Scheme> {
+        var ctx = initialContext
+        file.typeDeclarations().forEach {  }
+        file.valueDeclarations().forEach {
+            val (t, s) = this.infer(ctx, it.expr)
+            // TODO compare user scheme with inferred scheme
+
+            if (this.errors.isNotEmpty()) {
+                this.errors.forEach {
+                    println("error: ${it.value.pretty()} ${if (it.span == Span.DUMMY) "" else it.span.toString()}")
+                }
+                println("inferred AST: ${t.value.pretty()}")
+                throw RuntimeException("type errors occurred")
+            }
+            println("inferred AST: ${t.value.pretty()}")
+            val scheme = generalize(s.apply(t.value.type.value), ctx)
+            ctx = ctx.put(it.name.value, scheme)
+        }
+
+        return ctx.removeAll(initialContext.keysIterator())
     }
 }

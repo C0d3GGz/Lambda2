@@ -124,7 +124,11 @@ private val initialContext: TCContext
             Name("tail") to Scheme(
                 emptyList(),
                 Type.Fun(list, list)
-            ) // List -> List
+            ), // List -> List
+            Name("isEmpty") to Scheme(
+                emptyList(),
+                Type.Fun(list, Type.Bool.withDummySpan())
+            ) // List -> Bool
         )
     }
 

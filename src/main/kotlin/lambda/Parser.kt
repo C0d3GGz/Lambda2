@@ -66,50 +66,25 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return Spanned(Span(startPosition, endPosition), Scheme(vars.map { it.value }, ty.value))
     }
 
-
     fun parseTypeDeclaration(): Declaration.Type {
         val startPosition = iterator.next().span.start
         val name = parseUpperName()
         expectNext<Token.LBrace>(expectedError("expected open brace"))
 
-        val dataConstructors = mutableListOf<DataConstructor>()
-        val endPosition: Position
-
-        while (true) {
-            dataConstructors += parseDataConstructor()
-            expectNext<Token.Comma>(expectedError("expected comma"))
-            val peeked = iterator.peek()
-
-            if (peeked.value == Token.RBrace) {
-                endPosition = peeked.span.end
-                iterator.next()
-                break
-            }
-        }
+        val dataConstructors = commaSeparated(::parseDataConstructor) { it !is Token.RBrace }
+        val endPosition = expectNext<Token.RBrace>(expectedError("expected closing brace")).span.end
 
         return Declaration.Type(name, dataConstructors, Span(startPosition, endPosition))
     }
 
     fun parseDataConstructor(): DataConstructor {
         val name = parseUpperName()
-        val fields = mutableListOf<Type>()
-
-        val endPos: Position
-
         expectNext<Token.LParen>(expectedError("expected left paren"))
-        while (true) {
-            if (iterator.peek().value == Token.RParen) {
-                endPos = iterator.next().span.end
-                break
-            }
+        val fields = commaSeparated(::parseType) { it !is Token.RParen }.map { it.value }
+        val endPosition = expectNext<Token.RParen>(expectedError("expected right paren")).span.end
 
-            fields += parseType().value
-            expectNext<Token.Comma>(expectedError("expected comma"))
-        }
-
-        return DataConstructor(name.value, fields, Span(name.span.start, endPos))
+        return DataConstructor(name.value, fields, Span(name.span.start, endPosition))
     }
-
 
     fun parseType(): Spanned<Type> {
         val arg = parseTypeAtom()
@@ -235,18 +210,8 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         val dtor = parseUpperName("expected data constructor")
         expectNext<Token.LParen>(expectedError("expected open paren"))
 
-        val exprs = mutableListOf<Spanned<Expression>>()
-        val endPos: Position
-
-        while (true) {
-            if (iterator.peek().value == Token.RParen) {
-                endPos = iterator.next().span.end
-                break
-            }
-
-            exprs += parseExpression()
-            expectNext<Token.Comma>(expectedError("expected comma"))
-        }
+        val exprs = commaSeparated(::parseExpression) { it !is Token.RParen }
+        val endPos = expectNext<Token.RParen>(expectedError("expected closing paren")).span.end
 
         return Spanned(Span(type.span.start, endPos), Expression.Construction(type, dtor, exprs))
     }
@@ -271,6 +236,22 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         val elseBranch = parseExpression()
 
         return Spanned(Span(ifSpan.start, elseBranch.span.end), Expression.If(condition, thenBranch, elseBranch))
+    }
+
+    private fun <T> commaSeparated(parser: () -> T, cont: (Token) -> Boolean): List<T> {
+        val result = mutableListOf<T>()
+
+        while (cont(iterator.peek().value)) {
+            result += parser()
+
+            if (iterator.peek().value == Token.Comma) {
+                iterator.next()
+            } else {
+                break
+            }
+        }
+
+        return result
     }
 
     private fun expectedError(msg: String): (Spanned<Token>) -> String = { token ->

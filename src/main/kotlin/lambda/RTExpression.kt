@@ -82,10 +82,6 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                     val pack = ctx.get(Name("x")).get() as RTExpression.Pack
                     pack.data.last()
                 }
-                Name("#isEmpty") -> {
-                    val pack = ctx.get(Name("x")).get() as RTExpression.Pack
-                    RTExpression.Literal(BoolLit(pack.tag == 2))
-                }
                 else -> {
                     val res = ctx.get(expr.name)
                     return res.getOrElseThrow { EvalException("${expr.name} was undefined.") }
@@ -193,13 +189,6 @@ private fun initialContext(): Context {
             hashMap()
         )
 
-    val primIsEmpty: RTExpression =
-        RTExpression.Closure(
-            Name("x"),
-            RTExpression.Var(Name("#isEmpty")),
-            hashMap()
-        )
-
     // Z = λf· (λx· f (λy· x x y)) (λx· f (λy· x x y))
 
     val innerZ = RTExpression.Lambda(
@@ -235,8 +224,7 @@ private fun initialContext(): Context {
         Name("eq") to primEq,
         Name("fix") to z,
         Name("head") to primHead,
-        Name("tail") to primTail,
-        Name("isEmpty") to primIsEmpty
+        Name("tail") to primTail
     )
 }
 

@@ -9,46 +9,56 @@ class Lowering() {
 
     private var table: Map<Name, List<DataConstructor>> = emptyMap()
 
-    private fun lower(expr: Expression): RTExpression {
+    private fun lowerExpr(expr: Expression): RTExpression {
         return when (expr) {
             is Expression.Literal -> RTExpression.Literal(expr.lit)
             is Expression.Var -> RTExpression.Var(expr.name)
             is Expression.Lambda -> RTExpression.Lambda(
                 expr.binder.value,
-                lower(expr.body.value)
+                lowerExpr(expr.body.value)
             )
             is Expression.App -> RTExpression.App(
-                lower(expr.func.value),
-                lower(expr.arg.value)
+                lowerExpr(expr.func.value),
+                lowerExpr(expr.arg.value)
             )
-            is Expression.Typed -> lower(expr.expr.value)
+            is Expression.Typed -> lowerExpr(expr.expr.value)
             is Expression.Let -> {
                 // let x = 4 in add x 5
                 // (\x. add x 5) 4
 
                 RTExpression.App(
-                    RTExpression.Lambda(expr.binder.value, lower(expr.body.value)),
-                    lower(expr.expr.value)
+                    RTExpression.Lambda(expr.binder.value, lowerExpr(expr.body.value)),
+                    lowerExpr(expr.expr.value)
                 )
             }
             is Expression.If -> RTExpression.If(
-                lower(expr.condition.value),
-                lower(expr.thenBranch.value),
-                lower(expr.elseBranch.value)
+                lowerExpr(expr.condition.value),
+                lowerExpr(expr.thenBranch.value),
+                lowerExpr(expr.elseBranch.value)
             )
             is Expression.Construction -> RTExpression.Pack(
-                table.getValue(expr.type.value).indexOfFirst { it.name == expr.dtor.value } + 1, // TODO explode on non existing types or constructors
-                expr.exprs.map { lower(it.value) }
+                tagForDtor(expr.type.value, expr.dtor.value),
+                expr.exprs.map { lowerExpr(it.value) }
             )
+            is Expression.Match ->
+                RTExpression.Match(lowerExpr(expr.expr.value), expr.cases.map(::lowerCase))
         }
     }
+
+    private fun lowerCase(case: Expression.Case): RTExpression.Case {
+        val body = lowerExpr(case.body.value)
+        val tag = tagForDtor(case.type.value, case.dtor.value)
+        return RTExpression.Case(tag, case.binders.map { it.value }, body)
+    }
+
+    private fun tagForDtor(type: Name, dtor: Name): Int = table.getValue(type).indexOfFirst { it.name == dtor } + 1
 
     fun lowerSourceFile(sf: SourceFile): List<Pair<Name, RTExpression>> {
         table = sf.typeDeclarations()
             .map { type -> type.name.value to type.dataConstructors }
             .toMap()
 
-        return sf.valueDeclarations().map { it.name.value to lower(it.expr.value) }
+        return sf.valueDeclarations().map { it.name.value to lowerExpr(it.expr.value) }
     }
 }
 

@@ -3,11 +3,18 @@ type List {
     Nil()
 }
 
+let isEmpty2: List -> Bool =
+  \xs.
+    match xs {
+      List::Cons(a, b) => false,
+      List::Nil() => true
+    };
+
 let map : (Int -> Int) -> List -> List =
   \f.
     let mapr =
       \mapr. \xs.
-        if isEmpty xs
+        if isEmpty2 xs
           then List::Nil()
           else List::Cons(f (head xs), mapr (tail xs),) in
     fix mapr;

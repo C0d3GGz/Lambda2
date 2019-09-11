@@ -29,6 +29,16 @@ sealed class Expression {
     data class Construction(val type: Spanned<Name>, val dtor: Spanned<Name>, val exprs: List<Spanned<Expression>>) :
         Expression()
 
+    data class Match(val expr: Spanned<Expression>, val cases: List<Case>) : Expression()
+
+    data class Case(
+        val type: Spanned<Name>,
+        val dtor: Spanned<Name>,
+        val binders: List<Spanned<Name>>,
+        val body: Spanned<Expression>,
+        val span: Span
+    )
+
     open fun withSpan(span: Span) = Spanned(span, this)
 
 }

@@ -29,6 +29,7 @@ sealed class EvalExpression {
                 fromExpr(expr.elseBranch.value)
             )
             is Expression.Construction -> TODO()
+            is Expression.Match -> TODO()
         }
     }
 }

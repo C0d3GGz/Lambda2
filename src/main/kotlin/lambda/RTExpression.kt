@@ -22,6 +22,10 @@ sealed class RTExpression {
         val arity: Int
             get() = data.size
     }
+
+    data class Match(val expr: RTExpression, val cases: List<Case>) : RTExpression()
+
+    data class Case(val tag: Int, val binders: List<Name>, val body: RTExpression)
 }
 
 // (\x. x 1 2) : ?
@@ -113,6 +117,17 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
             expr.tag,
             expr.data.map { eval(ctx, it) }
         )
+        is RTExpression.Match -> {
+            val evaledExpr = eval(ctx, expr.expr) as? RTExpression.Pack
+                ?: throw EvalException("tried to pattern match on a non-pack value")
+            val case = expr.cases.firstOrNull { it.tag == evaledExpr.tag }
+                ?: throw EvalException("failed to match pattern with tag ${evaledExpr.tag}")
+            val tmpCtx = case.binders.zip(evaledExpr.data).fold(ctx) { acc, (n, e) ->
+                acc.put(n, e)
+            }
+
+            eval(tmpCtx, case.body)
+        }
     }
 }
 

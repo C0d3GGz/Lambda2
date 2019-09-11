@@ -29,6 +29,8 @@ private object Pretty {
                 "if ${expr.condition.value.pretty()} then ${expr.thenBranch.value.pretty()} else ${expr.elseBranch.value.pretty()}"
             is Expression.Construction ->
                 "${expr.type.value.value}::${expr.dtor.value.value}(${expr.exprs.joinToString(", ") { it.value.pretty() }})"
+            is Expression.Match ->
+                "match ${expr.expr.value.pretty()} {${expr.cases.joinToString(", ") { it.pretty() }}}"
         }
     }
 
@@ -60,6 +62,8 @@ private object Pretty {
                 "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
             is RTExpression.Pack ->
                 "Pack { tag: ${expr.tag}, arity: ${expr.arity}, data: [${expr.data.joinToString(", ") { it.pretty() }}]}"
+            is RTExpression.Match ->
+                "match ${expr.expr.pretty()} {${expr.cases.joinToString(", ") { it.pretty() }}}"
         }
     }
 
@@ -95,6 +99,13 @@ private object Pretty {
         }
     }
 
+    fun prettyPrintCase(case: Expression.Case): String {
+        return "${case.type.value.value}::${case.dtor.value.value}(${case.binders.joinToString(", ") { it.value.value }}) => ${case.body.value.pretty()}"
+    }
+
+    fun prettyPrintRTCase(case: RTExpression.Case): String {
+        return "<${case.tag}>(${case.binders.joinToString(", ") { it.value }}) => ${case.body.pretty()}"
+    }
 }
 
 fun Expression.pretty() = Pretty.prettyPrintExpr(this, 0)
@@ -103,3 +114,5 @@ fun RTExpression.pretty() = Pretty.prettyPrintRTExpr(this, 0)
 fun Context.pretty() = Pretty.prettyContext(this)
 fun Type.pretty() = Pretty.prettyPrintType(this, 0)
 fun Scheme.pretty() = Pretty.prettyPrintScheme(this)
+fun Expression.Case.pretty() = Pretty.prettyPrintCase(this)
+fun RTExpression.Case.pretty() = Pretty.prettyPrintRTCase(this)

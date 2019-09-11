@@ -32,6 +32,10 @@ data class Substitution(val subst: HashMap<Name, Type>) {
         return ctx.mapValues(::apply)
     }
 
+    fun apply(case: Expression.Case): Expression.Case {
+        return case.copy(body = apply(case.body, ::apply))
+    }
+
     fun apply(expr: Expression): Expression {
         return when (expr) {
             is Expression.Literal, is Expression.Var -> expr
@@ -45,6 +49,7 @@ data class Substitution(val subst: HashMap<Name, Type>) {
                 apply(expr.elseBranch, ::apply)
             )
             is Expression.Construction -> expr.copy(exprs = expr.exprs.map { apply(it, ::apply) })
+            is Expression.Match -> Expression.Match(apply(expr.expr, ::apply), expr.cases.map(::apply))
         }
     }
 
@@ -381,6 +386,8 @@ class Typechecker {
                     ).withSpan(span) to s
                 }
             }
+            is Expression.Match ->
+                Expression.Typed(sexpr, errorSentinel).withSpan(span) to Substitution.empty
         }
     }
 

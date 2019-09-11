@@ -1,4 +1,5 @@
 package lambda
+
 import lambda.Token.*
 
 sealed class Token {
@@ -17,23 +18,25 @@ sealed class Token {
     object Lam : Token()
     object Dot : Token()
     object Comma : Token()
-    object Semicolon: Token()
+    object Semicolon : Token()
     object Colon : Token()
     object DoubleColon : Token()
-    object Equals: Token()
+    object Equals : Token()
     object Arrow : Token()
+    object FatArrow : Token()
     data class Ident(val ident: String) : Token()
     data class UpperIdent(val ident: String) : Token()
     data class IntToken(val int: Int) : Token()
     data class BoolToken(val bool: Boolean) : Token()
     object EOF : Token()
-    object Let: Token()
-    object In: Token()
-    object Type: Token()
-    object Forall: Token()
-    object If: Token()
-    object Then: Token()
-    object Else: Token()
+    object Let : Token()
+    object In : Token()
+    object Type : Token()
+    object Forall : Token()
+    object If : Token()
+    object Then : Token()
+    object Else : Token()
+    object Match : Token()
 }
 
 data class Position(val line: Int, val column: Int) {
@@ -52,6 +55,7 @@ data class Span(val start: Position, val end: Position) {
         return "${this.start}-${this.end}"
     }
 }
+
 data class Spanned<out T>(val span: Span, val value: T) {
     // This is a bit dodgy... but any other option is too tedious
     override fun equals(other: Any?): Boolean {
@@ -97,11 +101,15 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
                 if (iterator.peek() == ':') {
                     iterator.next()
                     DoubleColon to 2
-                }
-                else
+                } else
                     Colon to 1
             }
-            '=' -> Equals to 1
+            '=' -> if (iterator.peek() == '>') {
+                iterator.next()
+                FatArrow to 2
+            } else {
+                Equals to 1
+            }
             '-' -> if (iterator.next() == '>') Arrow to 2 else {
                 throw RuntimeException()
             }
@@ -146,6 +154,7 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             "else" -> Else
             "forall" -> Forall
             "type" -> Token.Type
+            "match" -> Match
             else -> if (startChar.isUpperCase()) UpperIdent(result) else Ident(result)
         } to result.length
     }

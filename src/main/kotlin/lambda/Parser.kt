@@ -46,6 +46,17 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return Declaration.Value(name, scheme, expression, span)
     }
 
+    fun parseMatch(): Spanned<Expression.Match> {
+        val startPosition = iterator.next().span.start
+        val expr = parseExpression()
+
+        expectNext<Token.LBrace>(expectedError("expected open brace"))
+        val cases = commaSeparated(::parseCase) { it !is Token.RBrace }
+        val endPosition = expectNext<Token.RBrace>(expectedError("expected closing brace")).span.end
+
+        return Spanned(Span(startPosition, endPosition), Expression.Match(expr, cases))
+    }
+
     private fun parseScheme(): Spanned<Scheme> {
         val vars = mutableListOf<Spanned<Name>>()
         val t = iterator.peek()
@@ -69,8 +80,8 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     fun parseTypeDeclaration(): Declaration.Type {
         val startPosition = iterator.next().span.start
         val name = parseUpperName()
-        expectNext<Token.LBrace>(expectedError("expected open brace"))
 
+        expectNext<Token.LBrace>(expectedError("expected open brace"))
         val dataConstructors = commaSeparated(::parseDataConstructor) { it !is Token.RBrace }
         val endPosition = expectNext<Token.RBrace>(expectedError("expected closing brace")).span.end
 
@@ -199,6 +210,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             is Token.BoolToken -> parseBool()
             is Token.Let -> parseLet()
             is Token.If -> parseIf()
+            is Token.Match -> parseMatch()
             else -> null
         }
     }
@@ -214,6 +226,19 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         val endPos = expectNext<Token.RParen>(expectedError("expected closing paren")).span.end
 
         return Spanned(Span(type.span.start, endPos), Expression.Construction(type, dtor, exprs))
+    }
+
+    fun parseCase(): Expression.Case {
+        val typeName = parseUpperName("expected type name")
+        expectNext<Token.DoubleColon>(expectedError("expected double colon"))
+        val dtorName = parseUpperName("expected data constructor name")
+        expectNext<Token.LParen>(expectedError("expected left paren"))
+        val binders = commaSeparated(::parseName) { it !is Token.RParen }
+        expectNext<Token.RParen>(expectedError("expected right paren"))
+        expectNext<Token.FatArrow>(expectedError("expected fat arrow"))
+        val body = parseExpression()
+
+        return Expression.Case(typeName, dtorName, binders, body, Span(typeName.span.start, body.span.end))
     }
 
     private fun parseLet(): Spanned<Expression.Let> {

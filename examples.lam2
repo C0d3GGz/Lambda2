@@ -1,6 +1,11 @@
 type List {
-    Cons(Int, List),
-    Nil()
+  Cons(Int, List),
+  Nil()
+}
+
+type Option {
+  Some(Int),
+  None()
 }
 
 let isEmpty: List -> Bool =
@@ -8,6 +13,27 @@ let isEmpty: List -> Bool =
     match xs {
       List::Cons(a, b) => false,
       List::Nil() => true
+    };
+
+let head: List -> Option =
+  \xs.
+    match xs {
+      List::Cons(h, t) => Option::Some(h),
+      List::Nil() => Option::None()
+    };
+
+let tail: List -> List =
+  \xs.
+    match xs {
+      List::Cons(h, t) => t,
+      List::Nil() => List::Nil()
+    };
+
+let getOrElse: Int -> Option -> Int =
+  \default. \opt.
+    match opt {
+      Option::Some(a) => a,
+      Option::None() => default
     };
 
 let map : (Int -> Int) -> List -> List =
@@ -27,4 +53,4 @@ let sum: Int -> Int =
 let main: Int =
   let cons = \x. \xs. List::Cons(x, xs) in
   let l = cons 1 (cons 2 (cons 3 (cons 4 List::Nil()))) in
-  map sum l;
+  getOrElse 42 (head (tail l));

@@ -2,6 +2,7 @@ package lambda
 
 import io.vavr.collection.HashMap
 import io.vavr.kotlin.hashMap
+import io.vavr.kotlin.list
 import lambda.syntax.BoolLit
 import lambda.syntax.IntLit
 import lambda.syntax.Lit
@@ -73,14 +74,6 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                                     == matchIntLiteral(ctx.get(Name("y")).get())
                         )
                     )
-                }
-                Name("#head") -> {
-                    val pack = ctx.get(Name("x")).get() as RTExpression.Pack
-                    pack.data.first()
-                }
-                Name("#tail") -> {
-                    val pack = ctx.get(Name("x")).get() as RTExpression.Pack
-                    pack.data.last()
                 }
                 else -> {
                     val res = ctx.get(expr.name)
@@ -175,20 +168,6 @@ private fun initialContext(): Context {
             hashMap()
         )
 
-    val primHead: RTExpression =
-        RTExpression.Closure(
-            Name("x"),
-            RTExpression.Var(Name("#head")),
-            hashMap()
-        )
-
-    val primTail: RTExpression =
-        RTExpression.Closure(
-            Name("x"),
-            RTExpression.Var(Name("#tail")),
-            hashMap()
-        )
-
     // Z = λf· (λx· f (λy· x x y)) (λx· f (λy· x x y))
 
     val innerZ = RTExpression.Lambda(
@@ -222,9 +201,7 @@ private fun initialContext(): Context {
         Name("add") to primAdd,
         Name("sub") to primSub,
         Name("eq") to primEq,
-        Name("fix") to z,
-        Name("head") to primHead,
-        Name("tail") to primTail
+        Name("fix") to z
     )
 }
 

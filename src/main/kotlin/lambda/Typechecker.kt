@@ -121,15 +121,7 @@ private val initialContext: TCContext
                     Type.Fun(Type.v("a").withDummySpan(), Type.v("a").withDummySpan()).withDummySpan(),
                     Type.v("a").withDummySpan()
                 )
-            ), // forall a. (a -> a) -> a
-            Name("head") to Scheme(
-                emptyList(),
-                Type.Fun(list, Type.Int.withDummySpan())
-            ), // List -> Int
-            Name("tail") to Scheme(
-                emptyList(),
-                Type.Fun(list, list)
-            ) // List -> List
+            )
         )
     }
 

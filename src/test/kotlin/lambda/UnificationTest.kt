@@ -9,12 +9,12 @@ import org.junit.Test
 class UnificationTest {
 
     private fun fn(ty1: Type, ty2: Type): Type {
-        return Type.Fun(ty1.withDummySpan(), ty2.withDummySpan())
+        return Type.Fun(ty1, ty2)
     }
 
     private fun unify(ty1: Type, ty2: Type): Substitution {
         val typechecker = Typechecker()
-        return typechecker.unify(ty1.withDummySpan(), ty2.withDummySpan()).fold({
+        return typechecker.unify(ty1, ty2).fold({
             throw RuntimeException(it.pretty())
         }, { it })
     }

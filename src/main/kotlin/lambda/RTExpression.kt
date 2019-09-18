@@ -2,9 +2,6 @@ package lambda
 
 import io.vavr.collection.HashMap
 import io.vavr.kotlin.hashMap
-import io.vavr.kotlin.list
-import lambda.syntax.BoolLit
-import lambda.syntax.IntLit
 import lambda.syntax.Lit
 import lambda.syntax.Name
 
@@ -38,7 +35,7 @@ sealed class RTExpression {
 // (\f. \g. g (f 1) 1) : ?
 
 fun matchIntLiteral(expr: RTExpression): Int {
-    if (expr is RTExpression.Literal && expr.lit is IntLit) {
+    if (expr is RTExpression.Literal && expr.lit is Lit.Int) {
         return expr.lit.int
     } else {
         throw EvalException("$expr is not an Int")
@@ -53,7 +50,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
             when (expr.name) {
                 Name("#add") -> {
                     RTExpression.Literal(
-                        IntLit(
+                        Lit.Int(
                             matchIntLiteral(ctx.get(Name("x")).get())
                                     + matchIntLiteral(ctx.get(Name("y")).get())
                         )
@@ -61,7 +58,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 }
                 Name("#sub") -> {
                     RTExpression.Literal(
-                        IntLit(
+                        Lit.Int(
                             matchIntLiteral(ctx.get(Name("x")).get())
                                     - matchIntLiteral(ctx.get(Name("y")).get())
                         )
@@ -69,7 +66,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 }
                 Name("#eq") -> {
                     RTExpression.Literal(
-                        BoolLit(
+                        Lit.Bool(
                             matchIntLiteral(ctx.get(Name("x")).get())
                                     == matchIntLiteral(ctx.get(Name("y")).get())
                         )
@@ -96,7 +93,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
         is RTExpression.If -> {
             val evalCondition = eval(ctx, expr.condition)
 
-            if (evalCondition is RTExpression.Literal && evalCondition.lit is BoolLit) {
+            if (evalCondition is RTExpression.Literal && evalCondition.lit is Lit.Bool) {
                 if (evalCondition.lit.bool) eval(ctx, expr.thenBranch) else eval(ctx, expr.elseBranch)
             } else {
                 throw EvalException("$evalCondition is not a bool.")
@@ -205,4 +202,4 @@ private fun initialContext(): Context {
     )
 }
 
-class EvalException(s: String) : Exception(s) {}
+class EvalException(s: String) : Exception(s)

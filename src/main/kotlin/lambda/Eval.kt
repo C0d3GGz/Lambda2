@@ -1,6 +1,5 @@
 package lambda
 
-import lambda.syntax.BoolLit
 import lambda.syntax.Expression
 import lambda.syntax.Lit
 import lambda.syntax.Name
@@ -19,14 +18,14 @@ sealed class EvalExpression {
         fun fromExpr(expr: Expression): EvalExpression = when (expr) {
             is Expression.Literal -> Literal(expr.lit)
             is Expression.Var -> Var(expr.name)
-            is Expression.Lambda -> Lambda(expr.binder.value, fromExpr(expr.body.value))
-            is Expression.App -> App(fromExpr(expr.func.value), fromExpr(expr.arg.value))
-            is Expression.Typed -> Typed(fromExpr(expr.expr.value), expr.type.value)
-            is Expression.Let -> Let(expr.binder.value, fromExpr(expr.expr.value), fromExpr(expr.body.value))
+            is Expression.Lambda -> Lambda(expr.binder, fromExpr(expr.body))
+            is Expression.App -> App(fromExpr(expr.func), fromExpr(expr.arg))
+            is Expression.Typed -> Typed(fromExpr(expr.expr), expr.type)
+            is Expression.Let -> Let(expr.binder, fromExpr(expr.expr), fromExpr(expr.body))
             is Expression.If -> If(
-                fromExpr(expr.condition.value),
-                fromExpr(expr.thenBranch.value),
-                fromExpr(expr.elseBranch.value)
+                fromExpr(expr.condition),
+                fromExpr(expr.thenBranch),
+                fromExpr(expr.elseBranch)
             )
             is Expression.Construction -> TODO()
             is Expression.Match -> TODO()
@@ -97,7 +96,7 @@ class Eval {
             is EvalExpression.If -> {
                 val evalCondition = eval(expr.condition)
 
-                if (evalCondition is EvalExpression.Literal && evalCondition.lit is BoolLit) {
+                if (evalCondition is EvalExpression.Literal && evalCondition.lit is Lit.Bool) {
                     if (evalCondition.lit.bool) eval(expr.thenBranch) else eval(expr.elseBranch)
                 } else {
                     EvalExpression.If(evalCondition, expr.thenBranch, expr.elseBranch)

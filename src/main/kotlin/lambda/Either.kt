@@ -17,4 +17,9 @@ sealed class Either<L, R> {
         is Left -> Left(value)
         is Right -> r(value)
     }
+
+    fun <T> fold(l: (L) -> T, r: (R) -> T): T = when (this) {
+        is Left -> l(value)
+        is Right -> r(value)
+    }
 }

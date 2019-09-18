@@ -21,14 +21,14 @@ sealed class Declaration {
     abstract val span: Span
 
     data class Value(
-        val name: Spanned<Name>,
-        val scheme: Spanned<Scheme>,
-        val expr: Spanned<Expression>,
+        val name: Name,
+        val scheme: Scheme,
+        val expr: Expression,
         override val span: Span
     ) : Declaration()
 
     data class Type(
-        val name: Spanned<Name>,
+        val name: Name,
         val dataConstructors: List<DataConstructor>,
         override val span: Span
     ) : Declaration()

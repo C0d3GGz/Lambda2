@@ -8,29 +8,29 @@ private object Pretty {
 
     fun prettyPrintLiteral(lit: Lit): String {
         return when (lit) {
-            is IntLit -> lit.int.toString()
-            is BoolLit -> lit.bool.toString()
+            is Lit.Int -> lit.int.toString()
+            is Lit.Bool -> lit.bool.toString()
         }
     }
 
     fun prettyPrintExpr(expr: Expression, depth: Int): String {
         return when (expr) {
             is Expression.Literal -> prettyPrintLiteral(expr.lit)
-            is Expression.Var -> expr.name.value
-            is Expression.Lambda -> "(\\${expr.binder.value.value}. ${prettyPrintExpr(expr.body.value, 0)})"
+            is Expression.Var -> "${expr.name}"
+            is Expression.Lambda -> "(\\${expr.binder}. ${prettyPrintExpr(expr.body, 0)})"
             is Expression.App -> {
-                val output = "${prettyPrintExpr(expr.func.value, depth)} ${prettyPrintExpr(expr.arg.value, depth + 1)}"
+                val output = "${prettyPrintExpr(expr.func, depth)} ${prettyPrintExpr(expr.arg, depth + 1)}"
                 return if (depth > 0) "($output)" else output
             }
-            is Expression.Typed -> "(${expr.expr.value.pretty()} : ${expr.type.value.pretty()})"
+            is Expression.Typed -> "(${expr.expr.pretty()} : ${expr.type.pretty()})"
             is Expression.Let ->
-                "let ${expr.binder.value.value} = ${expr.expr.value.pretty()} in ${expr.body.value.pretty()}"
+                "let ${expr.binder} = ${expr.expr.pretty()} in ${expr.body.pretty()}"
             is Expression.If ->
-                "if ${expr.condition.value.pretty()} then ${expr.thenBranch.value.pretty()} else ${expr.elseBranch.value.pretty()}"
+                "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
             is Expression.Construction ->
-                "${expr.type.value.value}::${expr.dtor.value.value}(${expr.exprs.joinToString(", ") { it.value.pretty() }})"
+                "${expr.type}::${expr.dtor}(${expr.exprs.joinToString(", ") { it.pretty() }})"
             is Expression.Match ->
-                "match ${expr.expr.value.pretty()} {${expr.cases.joinToString(", ") { it.pretty() }}}"
+                "match ${expr.expr.pretty()} {${expr.cases.joinToString(", ") { it.pretty() }}}"
         }
     }
 
@@ -49,8 +49,8 @@ private object Pretty {
     fun prettyPrintRTExpr(expr: RTExpression, depth: Int): String {
         return when (expr) {
             is RTExpression.Literal -> prettyPrintLiteral(expr.lit)
-            is RTExpression.Var -> expr.name.value
-            is RTExpression.Lambda -> "(\\${expr.binder.value}. ${prettyPrintRTExpr(expr.body, 0)})"
+            is RTExpression.Var -> "${expr.name}"
+            is RTExpression.Lambda -> "(\\${expr.binder}. ${prettyPrintRTExpr(expr.body, 0)})"
             is RTExpression.Closure -> {
                 "(\\${expr.binder.value}. ${prettyPrintRTExpr(expr.body, 0)})"
             }
@@ -69,10 +69,10 @@ private object Pretty {
 
     fun prettyPrintType(type: Type, depth: Int): String {
         return when (type) {
-            is Type.Constructor -> type.name.value.value
-            is Type.Var -> type.name.value
+            is Type.Constructor -> "${type.name}"
+            is Type.Var -> "${type.name}"
             is Type.Fun -> {
-                val output = "${prettyPrintType(type.arg.value, depth + 1)} -> ${prettyPrintType(type.result.value, 0)}"
+                val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"
                 return if (depth > 0) "($output)" else output
             }
             Type.ErrorSentinel -> "ERR"
@@ -81,30 +81,30 @@ private object Pretty {
 
     fun prettyPrintScheme(scheme: Scheme): String {
         return if (scheme.vars.isEmpty()) scheme.ty.pretty()
-        else "forall ${scheme.vars.map(Name::value).joinToString(" ")}. ${scheme.ty.pretty()}"
+        else "forall ${scheme.vars.joinToString(" ")}. ${scheme.ty.pretty()}"
     }
 
     fun prettyPrintEvalExpr(expr: EvalExpression, depth: Int): String {
         return when (expr) {
             is EvalExpression.Literal -> prettyPrintLiteral(expr.lit)
-            is EvalExpression.Var -> expr.name.value
-            is EvalExpression.Lambda -> "(\\${expr.binder.value}. ${expr.body.pretty()})"
+            is EvalExpression.Var -> expr.name.toString()
+            is EvalExpression.Lambda -> "(\\${expr.binder}. ${expr.body.pretty()})"
             is EvalExpression.App -> {
                 val output = "${prettyPrintEvalExpr(expr.func, depth)} ${prettyPrintEvalExpr(expr.arg, depth + 1)}"
                 return if (depth > 0) "($output)" else output
             }
             is EvalExpression.Typed -> "(${expr.expr.pretty()} : ${expr.type.pretty()})"
-            is EvalExpression.Let -> "let ${expr.binder.value} = ${expr.expr.pretty()} in ${expr.body.pretty()}"
+            is EvalExpression.Let -> "let ${expr.binder} = ${expr.expr.pretty()} in ${expr.body.pretty()}"
             is EvalExpression.If -> "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
         }
     }
 
     fun prettyPrintCase(case: Expression.Case): String {
-        return "${case.type.value.value}::${case.dtor.value.value}(${case.binders.joinToString(", ") { it.value.value }}) => ${case.body.value.pretty()}"
+        return "${case.type}::${case.dtor}(${case.binders.joinToString(", ")}) => ${case.body.pretty()}"
     }
 
     fun prettyPrintRTCase(case: RTExpression.Case): String {
-        return "<${case.tag}>(${case.binders.joinToString(", ") { it.value }}) => ${case.body.pretty()}"
+        return "<${case.tag}>(${case.binders.joinToString(", ")}) => ${case.body.pretty()}"
     }
 }
 

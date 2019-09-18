@@ -58,12 +58,12 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     }
 
     private fun parseScheme(): Scheme {
-        val vars = mutableListOf<Name>()
+        val vars = mutableListOf<TyVar>()
         val t = iterator.peek()
         if (t.value is Token.Forall) {
             iterator.next()
             while (true) {
-                vars += parseName()
+                vars += parseTyVar()
                 if (iterator.peek().value == Token.Dot) {
                     iterator.next()
                     break
@@ -124,8 +124,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
                 Type.Constructor(name)
             }
             is Token.Ident -> {
-                val name = parseName()
-                Type.Var(name)
+                Type.Var(parseTyVar())
             }
             else -> throw RuntimeException("expected type found $nextToken at $start")
         }
@@ -134,6 +133,10 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     fun parseName(): Name {
         val (span, ident) = expectNext<Token.Ident>(expectedError("expected identifier"))
         return Name(ident.ident, span)
+    }
+
+    fun parseTyVar(): TyVar {
+        return TyVar(parseName())
     }
 
     fun parseUpperName(msg: String = "expected uppercase identifier"): Name {

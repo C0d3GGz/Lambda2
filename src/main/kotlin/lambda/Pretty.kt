@@ -70,12 +70,13 @@ private object Pretty {
     fun prettyPrintType(type: Type, depth: Int): String {
         return when (type) {
             is Type.Constructor -> "${type.name}"
-            is Type.Var -> "${type.name}"
+            is Type.Var -> "${type.v.name}"
             is Type.Fun -> {
                 val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"
                 return if (depth > 0) "($output)" else output
             }
             Type.ErrorSentinel -> "ERR"
+            is Type.Unknown -> "$type"
         }
     }
 

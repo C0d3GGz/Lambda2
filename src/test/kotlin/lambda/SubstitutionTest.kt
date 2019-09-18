@@ -12,24 +12,24 @@ class SubstitutionTest {
     fun `should leave unknown vars untouched`() {
         val substitution = Substitution(
             hashMap(
-                Name("a") to Type.Int
+                1 to Type.Int
             )
         )
 
-        val result = substitution.apply(Type.Var(Name("b")))
+        val result = substitution.apply(Type.Unknown(2))
 
-        assertEquals(Type.Var(Name("b")), result)
+        assertEquals(Type.Unknown(2), result)
     }
 
     @Test
     fun `should substitute a known var to int`() {
         val substitution = Substitution(
             hashMap(
-                Name("a") to Type.Int
+                1 to Type.Int
             )
         )
 
-        val result = substitution.apply(Type.Var(Name("a")))
+        val result = substitution.apply(Type.Unknown(1))
 
         assertEquals(Type.Int, result)
     }
@@ -38,15 +38,15 @@ class SubstitutionTest {
     fun `should substitute a function`() {
         val substitution = Substitution(
             hashMap(
-                Name("a") to Type.Int,
-                Name("b") to Type.Bool
+                1 to Type.Int,
+                2 to Type.Bool
             )
         )
 
         val result = substitution.apply(
             Type.Fun(
-                Type.Var(Name("a")),
-                Type.Var(Name("b"))
+                Type.Unknown(1),
+                Type.Unknown(2)
             )
         )
 
@@ -56,7 +56,7 @@ class SubstitutionTest {
     @Test
     fun `treat the empty substitution as identity`() {
         val empty = Substitution.empty
-        val substitution = Substitution(hashMap(Name("a") to Type.Int))
+        val substitution = Substitution(hashMap(1 to Type.Int))
 
         assertEquals(
             substitution,
@@ -72,17 +72,17 @@ class SubstitutionTest {
     @Test
     fun `compose should transitively apply substitutions`() {
         val first = Substitution(hashMap(
-            Name("b") to Type.Int
+            2 to Type.Int
         ))
 
         val second = Substitution(hashMap(
-            Name("a") to Type.v("b")
+            1 to Type.Unknown(2)
         ))
 
         assertEquals(
             Substitution(hashMap(
-                Name("a") to Type.Int,
-                Name("b") to Type.Int
+                1 to Type.Int,
+                2 to Type.Int
             )),
             first.compose(second)
         )
@@ -91,16 +91,16 @@ class SubstitutionTest {
     @Test
     fun `compose should merge right-biased`(){
         val first = Substitution(hashMap(
-            Name("b") to Type.Int
+            2 to Type.Int
         ))
 
         val second = Substitution(hashMap(
-            Name("b") to Type.Bool
+            2 to Type.Bool
         ))
 
         assertEquals(
             Substitution(hashMap(
-                Name("b") to Type.Bool
+                2 to Type.Bool
             )),
             first.compose(second)
         )

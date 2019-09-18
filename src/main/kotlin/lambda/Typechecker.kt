@@ -8,8 +8,8 @@ import lambda.syntax.*
 
 typealias TCContext = HashMap<Name, Scheme>
 
-data class Substitution(val subst: HashMap<Name, Type>) {
-    fun get(name: Name): Option<Type> = subst.get(name)
+data class Substitution(val subst: HashMap<Int, Type>) {
+    fun get(u: Int): Option<Type> = subst.get(u)
 
     fun compose(that: Substitution): Substitution {
         return Substitution(that.subst.mapValues(::apply).merge(subst))
@@ -18,14 +18,14 @@ data class Substitution(val subst: HashMap<Name, Type>) {
     fun apply(type: Type): Type {
         return when (type) {
             is Type.Constructor, Type.ErrorSentinel -> type
-            is Type.Var -> get(type.name).getOrElse(type)
+            is Type.Var -> type
             is Type.Fun -> Type.Fun(apply(type.arg), apply(type.result))
+            is Type.Unknown -> subst.getOrElse(type.u, type)
         }
     }
 
     fun apply(scheme: Scheme): Scheme {
-        val tmpS = Substitution(this.subst.removeAll(scheme.vars))
-        return Scheme(scheme.vars, tmpS.apply(scheme.ty))
+        return Scheme(scheme.vars, apply(scheme.ty))
     }
 
     fun apply(ctx: TCContext): TCContext {
@@ -73,15 +73,15 @@ sealed class TypeError {
     data class UnknownVar(val name: Name) : TypeError()
     data class UnknownType(val name: Name) : TypeError()
     data class UnknownDtor(val type: Name, val name: Name) : TypeError()
-    data class OccursCheck(val name: Name, val type: Type) : TypeError()
+    data class OccursCheck(val u: Int, val type: Type) : TypeError()
     data class IfCondition(val type: Type) : TypeError()
 
     fun pretty(): String = when (this) {
         is Unification -> "Failed to unify ${ty1.pretty()} with ${ty2.pretty()}"
-        is UnknownVar -> "Unknown var ${name.value}"
-        is UnknownType -> "Unknown type ${name.value}"
-        is UnknownDtor -> "Type ${type.value} does not have a constructor named ${name.value}"
-        is OccursCheck -> "Failed to infer the infinite type ${name.value} ~ ${type.pretty()}"
+        is UnknownVar -> "Unknown var $name"
+        is UnknownType -> "Unknown type $name"
+        is UnknownDtor -> "Type $type does not have a constructor named $name"
+        is OccursCheck -> "Failed to infer the infinite type u$u ~ ${type.pretty()}"
         is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
     }
 }
@@ -113,11 +113,11 @@ private val initialContext: TCContext
                 )
             ),
             Name("identity") to Scheme(
-                listOf(Name("a")),
+                listOf(TyVar(Name("a"))),
                 Type.Fun(Type.v("a"), Type.v("a"))
             ), // forall a. a -> a
             Name("fix") to Scheme(
-                listOf(Name("a")),
+                listOf(TyVar(Name("a"))),
                 Type.Fun(
                     Type.Fun(Type.v("a"), Type.v("a")),
                     Type.v("a")
@@ -128,45 +128,50 @@ private val initialContext: TCContext
 
 class Typechecker {
 
-    var fresh: Int = 0
-    var errors = mutableListOf<Spanned<TypeError>>()
+    private var fresh: Int = 0
+    private var errors = mutableListOf<Spanned<TypeError>>()
 
     val types: MutableMap<Name, List<DataConstructor>> = mutableMapOf(
         Name("Int") to emptyList(),
         Name("Bool") to emptyList()
     )
 
-    fun freshVar(): Type {
-        fresh += 1
-        return Type.Var(Name("u$fresh"))
-    }
+    fun freshVar(): Type.Unknown = Type.Unknown(++fresh)
 
     fun reportError(error: TypeError, span: Span) {
         errors.add(Spanned(span, error))
     }
 
     fun instantiate(scheme: Scheme): Type {
-        val x = scheme.vars.map { it to freshVar() }.toTypedArray()
-        val s = Substitution(hashMap(*x))
-
-        return s.apply(scheme.ty)
+        val mappings = scheme.vars.map { it to freshVar() }
+        return scheme.ty.substMany(mappings)
     }
 
-    fun generalize(type: Type, ctx: TCContext): Scheme { // TODO clean up names
-        val freeInCtx = ctx.values().map(Scheme::freeVars).foldLeft(hashSet<Name>(), { a, b -> b.union(a) })
-        val freeVars = type.freeVars().removeAll(freeInCtx)
-        /*val vars = ('a'..'z').take(freeVars.size()).map { Name(it.toString()) } */
+    fun generalize(type: Type, ctx: TCContext): Scheme {
+        val unknownsInCtx = ctx.values().map(Scheme::unknowns).fold(hashSet<Int>()) { a, b -> b.union(a) }
+        val unknownVars = type.unknowns().removeAll(unknownsInCtx)
+        val niceVars = ('a'..'z').iterator()
 
-        return Scheme(freeVars.toJavaList(), type)
+        var subst = hashMap<Int, Type>()
+        val quantifier = mutableListOf<TyVar>()
+
+        for (free in unknownVars) {
+            val v = TyVar(Name(niceVars.nextChar().toString()))
+
+            quantifier += v
+            subst = subst.put(free, Type.Var(v))
+        }
+
+        return Scheme(quantifier, Substitution(subst).apply(type))
     }
 
     fun unify(t1: Type, t2: Type): Either<TypeError, Substitution> {
         return if (t1 == t2)
             Either.Right(Substitution.empty)
-        else if (t1 is Type.Var)
-            varBind(t1, t2)
-        else if (t2 is Type.Var)
-            varBind(t2, t1)
+        else if (t1 is Type.Unknown)
+            varBind(t1.u, t2)
+        else if (t2 is Type.Unknown)
+            varBind(t2.u, t1)
         else if (t1 is Type.Fun && t2 is Type.Fun) {
             unify(t1.arg, t2.arg).flatMap { s1 ->
                 unify(s1.apply(t1.result), s1.apply(t2.result)).map { s2 ->
@@ -178,11 +183,11 @@ class Typechecker {
         }
     }
 
-    private fun varBind(v: Type.Var, type: Type): Either<TypeError, Substitution> {
-        return if (type.freeVars().contains(v.name))
-            Either.Left(TypeError.OccursCheck(v.name, type))
+    private fun varBind(u: Int, type: Type): Either<TypeError, Substitution> {
+        return if (type.unknowns().contains(u))
+            Either.Left(TypeError.OccursCheck(u, type))
         else
-            Either.Right(Substitution(hashMap(v.name to type)))
+            Either.Right(Substitution(hashMap(u to type)))
     }
 
     fun infer(ctx: TCContext, expr: Expression): Pair<Expression.Typed, Substitution> {

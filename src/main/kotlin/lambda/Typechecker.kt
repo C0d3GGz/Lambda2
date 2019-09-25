@@ -8,10 +8,10 @@ fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
 typealias TCContext = HashMap<Name, Scheme>
 
 data class Substitution(val subst: HashMap<Int, Type>) {
-    fun get(u: Int): Type? = subst[u]
+    operator fun get(u: Int): Type? = subst[u]
 
-    fun compose(that: Substitution): Substitution { // TODO remove
-        return that
+    operator fun set(u: Int, type: Type) {
+        subst[u] = type
     }
 
     fun apply(type: Type): Type {
@@ -25,10 +25,6 @@ data class Substitution(val subst: HashMap<Int, Type>) {
 
     fun apply(scheme: Scheme): Scheme {
         return Scheme(scheme.vars, apply(scheme.ty))
-    }
-
-    fun apply(ctx: TCContext): TCContext { // TODO remove
-        return ctx
     }
 
     fun apply(case: Expression.Case): Expression.Case {
@@ -51,11 +47,6 @@ data class Substitution(val subst: HashMap<Int, Type>) {
             is Expression.Construction -> expr.copy(exprs = expr.exprs.map(::apply))
             is Expression.Match -> Expression.Match(apply(expr.expr), expr.cases.map(::apply), expr.sp)
         }
-    }
-
-    fun <T> apply(type: Spanned<T>, f: (T) -> T): Spanned<T> { // TODO remove?
-        val (span, ty) = type
-        return Spanned(span, f(ty))
     }
 
     fun apply(expr: Expression.Typed): Expression.Typed =
@@ -135,6 +126,8 @@ class Typechecker {
 
     private var fresh: Int = 0
 
+    private val substitution: Substitution = Substitution.empty
+
     val types: MutableMap<Name, List<DataConstructor>> = mutableMapOf(
         Name("Int") to emptyList(),
         Name("Bool") to emptyList()
@@ -165,15 +158,17 @@ class Typechecker {
         return Scheme(quantifier, Substitution(subst).apply(type))
     }
 
-    fun unify(t1: Type, t2: Type): Substitution {
-        return when {
-            t1 == t2 -> Substitution.empty
+    fun unify(t1: Type, t2: Type) {
+        val t1 = zonk(t1)
+        val t2 = zonk(t2)
+
+        when {
+            t1 == t2 -> return
             t1 is Type.Unknown -> varBind(t1.u, t2)
             t2 is Type.Unknown -> varBind(t2.u, t1)
             t1 is Type.Fun && t2 is Type.Fun -> try {
-                val s1 = unify(t1.arg, t2.arg)
-                val s2 = unify(s1.apply(t1.result), s1.apply(t2.result))
-                return s2.compose(s1)
+                unify(t1.arg, t2.arg)
+                unify(t1.result, t2.result)
             } catch (err: TypeError.Unification) {
                 err.stack.add(t1 to t2)
                 throw err
@@ -190,15 +185,24 @@ class Typechecker {
             throw err
         }
 
-    private fun varBind(u: Int, type: Type): Substitution {
+    private fun varBind(u: Int, type: Type) {
         return if (type.unknowns().contains(u)) {
             throw TypeError.OccursCheck(u, type)
         } else {
-            Substitution(hashMapOf(u to type))
+            substitution[u] = type
         }
     }
 
-    fun infer(ctx: TCContext, expr: Expression): Pair<Expression.Typed, Substitution> {
+    private fun zonk(type: Type): Type = substitution.apply(type)
+
+    private fun zonk(type: Expression.Typed): Expression.Typed = substitution.apply(type)
+
+    fun reset() {
+        fresh = 0
+        substitution.subst.clear()
+    }
+
+    fun infer(ctx: TCContext, expr: Expression): Expression.Typed {
         val span = expr.span
         val tyWrap: (Expression, Type) -> Expression.Typed = { e, ty -> Expression.Typed(e, ty, span) }
 
@@ -208,76 +212,73 @@ class Typechecker {
                     is Lit.Int -> Type.Int
                     is Lit.Bool -> Type.Bool
                 }
-                tyWrap(expr, t) to Substitution.empty
+
+                tyWrap(expr, t)
             }
             is Expression.Lambda -> {
                 val tyBinder = freshVar()
                 val tmpCtx = HashMap(ctx)
                 tmpCtx[expr.binder] = Scheme.fromType(tyBinder)
 
-                val (body, s) = withSpannedError(expr.body.span) {
+                val body = withSpannedError(expr.body.span) {
                     this.infer(tmpCtx, expr.body)
                 }
 
-                s.apply(
-                    tyWrap(
-                        Expression.Lambda(expr.binder, body, span),
-                        Type.Fun(tyBinder, body.type)
-                    )
-                ) to s
+                tyWrap(
+                    Expression.Lambda(expr.binder, body, span),
+                    Type.Fun(tyBinder, body.type)
+                )
             }
             is Expression.Var -> {
                 val scheme = ctx[expr.name] ?: throw TypeError.UnknownVar(expr.name, span)
 
                 // If we try to look up a value that failed to type check before we immediately bail out
                 if (scheme.ty is Type.ErrorSentinel) throw TypeError.Followup()
-                tyWrap(expr, instantiate(scheme)) to Substitution.empty
+                tyWrap(expr, instantiate(scheme))
             }
             is Expression.App -> {
                 val tyRes = freshVar()
-                val (func, s1) = infer(ctx, expr.func)
-                val (arg, s2) = infer(s1.apply(ctx), expr.arg)
-                val s3 = withSpannedError(arg.span) { unify(s2.apply(func.type), Type.Fun(arg.type, tyRes)) }
-                val s = s3.compose(s2).compose(s1)
-                s.apply(tyWrap(Expression.App(func, arg, span), tyRes)) to s
+                val func = infer(ctx, expr.func)
+                val arg = infer(ctx, expr.arg)
+
+                withSpannedError(arg.span) { unify(func.type, Type.Fun(arg.type, tyRes)) }
+                tyWrap(Expression.App(func, arg, span), tyRes)
             }
             is Expression.Typed -> {
-                val (tyExpr, s) = infer(ctx, expr.expr)
+                val tyExpr = infer(ctx, expr.expr)
                 if (!expr.type.freeVars().isEmpty) { // TODO check wellformedness
                     throw RuntimeException("not allowed")
                 }
-                val s2 = withSpannedError(span) { unify(tyExpr.type, expr.type) }
-                s2.apply(tyExpr) to s2.compose(s)
+
+                withSpannedError(span) { unify(tyExpr.type, expr.type) }
+                tyExpr
             }
             is Expression.Let -> {
-                val (tyBinder, s1) = infer(ctx, expr.expr)
-                val genBinder = generalize(tyBinder.type, s1.apply(ctx))
+                val tyBinder = infer(ctx, expr.expr)
+                val genBinder = generalize(tyBinder.type, ctx)
 
-                var tmpCtx = HashMap(ctx)
+                val tmpCtx = HashMap(ctx)
                 tmpCtx[expr.binder] = genBinder
-                tmpCtx = s1.apply(tmpCtx)
 
-                val (tyBody, s2) = infer(tmpCtx, s1.apply(expr.body))
+                val tyBody = infer(tmpCtx, expr.body)
 
-                val s = s2.compose(s1)
-                s.apply(tyWrap(Expression.Let(expr.binder, tyBinder, tyBody, span), tyBody.type)) to s
+                tyWrap(Expression.Let(expr.binder, tyBinder, tyBody, span), tyBody.type)
             }
             is Expression.If -> {
-                val (tyCond, s1) = infer(ctx, expr.condition)
-                val s2 = try {
+                val tyCond = infer(ctx, expr.condition)
+
+                try {
                     unify(tyCond.type, Type.Bool)
                 } catch (err: TypeError) {
                     throw TypeError.IfCondition(tyCond.type, expr.condition.span)
                 }
-                val ctx = s2.apply(s1.apply(ctx))
 
-                val (tyThen, s3) = infer(ctx, expr.thenBranch)
-                val (tyElse, s4) = infer(s3.apply(ctx), expr.elseBranch)
+                val tyThen = infer(ctx, expr.thenBranch)
+                val tyElse = infer(ctx, expr.elseBranch)
 
-                val s5 = withSpannedError(span) { unify(s4.apply(tyThen.type), tyElse.type) }
+                withSpannedError(span) { unify(tyThen.type, tyElse.type) }
 
-                val s = s5.compose(s4).compose(s3).compose(s2).compose(s1)
-                s.apply(tyWrap(Expression.If(tyCond, tyThen, tyElse, span), tyThen.type)) to s
+                tyWrap(Expression.If(tyCond, tyThen, tyElse, span), tyThen.type)
             }
 
             is Expression.Construction -> {
@@ -286,24 +287,20 @@ class Typechecker {
                 }
 
                 val typedFields = mutableListOf<Expression.Typed>()
-                var s = Substitution.empty
 
                 expr.exprs.zip(fields).forEach { (e, f) ->
-                    val (t, s1) = withSpannedError(e.span) { infer(ctx, s.apply(e)) }
-                    val s2 = withSpannedError(e.span) { unify(t.type, f) }
-                    typedFields.add(s2.apply(t))
-                    s = s2.compose(s1).compose(s)
+                    val t = withSpannedError(e.span) { infer(ctx, e) }
+                    withSpannedError(e.span) { unify(t.type, f) }
+                    typedFields += t
                 }
 
-                s.apply(
-                    tyWrap(
-                        Expression.Construction(expr.type, expr.dtor, typedFields, span),
-                        Type.Constructor(expr.type)
-                    )
-                ) to s
+                tyWrap(
+                    Expression.Construction(expr.type, expr.dtor, typedFields, span),
+                    Type.Constructor(expr.type)
+                )
             }
             is Expression.Match ->
-                tyWrap(expr, Type.ErrorSentinel) to Substitution.empty
+                tyWrap(expr, Type.ErrorSentinel)
         }
     }
 
@@ -314,14 +311,15 @@ class Typechecker {
     }
 
     fun inferExpr(expr: Expression): Scheme {
-        val (t, s) = try {
-            this.infer(initialContext, expr)
+        val t = try {
+            reset()
+            zonk(infer(initialContext, expr))
         } catch (err: TypeError) {
             println("error: ${err.pretty()} ${if (err.span == Span.DUMMY) "" else err.span.toString()}")
             throw RuntimeException("type errors occurred")
         }
         println("inferred AST: ${t.pretty()}")
-        return generalize(s.apply(t.type), initialContext)
+        return generalize(t.type, initialContext)
     }
 
     fun inferSourceFile(file: SourceFile): HashMap<Name, Scheme> {
@@ -334,8 +332,9 @@ class Typechecker {
 
         file.valueDeclarations().forEach {
             try {
-                val (t, s) = this.infer(ctx, it.expr)
-                val scheme = generalize(s.apply(t.type), ctx)
+                reset()
+                val t = zonk(infer(ctx, it.expr))
+                val scheme = generalize(t.type, ctx)
                 ctx[it.name] = scheme
             } catch (err: TypeError) {
                 errored = true

@@ -141,6 +141,8 @@ class Typechecker {
     }
 
     fun generalize(type: Type, ctx: TCContext): Scheme {
+        val type = zonk(type)
+
         val unknownsInCtx = ctx.values.map(Scheme::unknowns).fold(hashSet<Int>()) { a, b -> b.union(a) }
         val unknownVars = type.unknowns().removeAll(unknownsInCtx)
         val niceVars = ('a'..'z').iterator()
@@ -299,9 +301,34 @@ class Typechecker {
                     Type.Constructor(expr.type)
                 )
             }
-            is Expression.Match ->
-                tyWrap(expr, Type.ErrorSentinel)
+            is Expression.Match -> {
+                val tyRes = freshVar()
+                val tyExpr = infer(ctx, expr.expr)
+                val tyCases = mutableListOf<Expression.Case>()
+
+                expr.cases.forEach { case ->
+                    val tmpCtx = HashMap(ctx)
+
+                    inferPattern(case.type, case.dtor, case.binders, tyExpr.type)
+                        .forEach { (name, type) -> tmpCtx[name] = Scheme.fromType(type) }
+
+                    val tyBody = infer(tmpCtx, case.body)
+                    unify(tyBody.type, tyRes)
+
+                    tyCases += case.copy(body = tyBody)
+                }
+
+                tyWrap(
+                    Expression.Match(tyExpr, tyCases, span),
+                    tyRes
+                )
+            }
         }
+    }
+
+    fun inferPattern(type: Name, dtor: Name, binders: List<Name>, tyExpr: Type): List<Pair<Name, Type>> {
+        unify(Type.Constructor(type), tyExpr)
+        return binders.zip(lookupDtor(type, dtor))
     }
 
     fun lookupDtor(type: Name, dtor: Name): List<Type> {

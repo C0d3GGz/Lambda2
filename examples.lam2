@@ -3,4 +3,4 @@ let const: forall a b. a -> b -> a =
 
 let main: Int =
   let id = \x.x in
-  const (id 1) (id true);
+  const (add 1 true) (id true);

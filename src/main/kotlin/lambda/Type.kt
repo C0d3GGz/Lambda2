@@ -24,6 +24,7 @@ sealed class Type {
     data class Unknown(val u: Int) : Type() {
         override fun toString(): String = "u$u"
     }
+
     data class Fun(val arg: Type, val result: Type, val sp: Span = Span.DUMMY) : Type()
 
     fun isError() = this is ErrorSentinel
@@ -68,4 +69,8 @@ data class Scheme(val vars: List<TyVar>, val ty: Type) {
     val span: Span get() = Span(vars.firstOrNull()?.name?.span?.start ?: ty.span.start, ty.span.end)
     fun freeVars(): HashSet<TyVar> = ty.freeVars().removeAll(vars)
     fun unknowns(): HashSet<Int> = ty.unknowns()
+
+    companion object {
+        fun fromType(type: Type): Scheme = Scheme(emptyList(), type)
+    }
 }

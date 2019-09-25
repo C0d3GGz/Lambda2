@@ -68,22 +68,30 @@ data class Substitution(val subst: HashMap<Int, Type>) {
 }
 
 
-sealed class TypeError {
-    data class Unification(val ty1: Type, val ty2: Type) : TypeError()
-    data class UnknownVar(val name: Name) : TypeError()
+sealed class TypeError : Exception() {
+    open var span: Span? = null
+
+    data class Unification(val ty1: Type, val ty2: Type, val stack: MutableList<Pair<Type, Type>>) : TypeError()
+    data class UnknownVar(val name: Name, override var span: Span?) : TypeError()
     data class UnknownType(val name: Name) : TypeError()
     data class UnknownDtor(val type: Name, val name: Name) : TypeError()
     data class OccursCheck(val u: Int, val type: Type) : TypeError()
-    data class IfCondition(val type: Type) : TypeError()
+    data class IfCondition(val type: Type, override var span: Span?) : TypeError()
+    class Followup() : TypeError()
 
     fun pretty(): String = when (this) {
-        is Unification -> "Failed to unify ${ty1.pretty()} with ${ty2.pretty()}"
+        is Unification ->
+            """Failed to match ${ty1.pretty()} with ${ty2.pretty()}
+  ${stack.joinToString("\n  ") { (t1, t2) -> "while trying to match ${t1.pretty()} with ${t2.pretty()}" }}"""
         is UnknownVar -> "Unknown var $name"
         is UnknownType -> "Unknown type $name"
         is UnknownDtor -> "Type $type does not have a constructor named $name"
         is OccursCheck -> "Failed to infer the infinite type u$u ~ ${type.pretty()}"
         is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
+        is Followup -> "Followup error, you shouldn't be seeing this"
     }
+
+    override fun toString(): String = this.pretty()
 }
 
 private val initialContext: TCContext
@@ -129,7 +137,6 @@ private val initialContext: TCContext
 class Typechecker {
 
     private var fresh: Int = 0
-    private var errors = mutableListOf<Spanned<TypeError>>()
 
     val types: MutableMap<Name, List<DataConstructor>> = mutableMapOf(
         Name("Int") to emptyList(),
@@ -137,10 +144,6 @@ class Typechecker {
     )
 
     fun freshVar(): Type.Unknown = Type.Unknown(++fresh)
-
-    fun reportError(error: TypeError, span: Span) {
-        errors.add(Spanned(span, error))
-    }
 
     fun instantiate(scheme: Scheme): Type {
         val mappings = scheme.vars.map { it to freshVar() }
@@ -165,35 +168,41 @@ class Typechecker {
         return Scheme(quantifier, Substitution(subst).apply(type))
     }
 
-    fun unify(t1: Type, t2: Type): Either<TypeError, Substitution> {
-        return if (t1 == t2)
-            Either.Right(Substitution.empty)
-        else if (t1 is Type.Unknown)
-            varBind(t1.u, t2)
-        else if (t2 is Type.Unknown)
-            varBind(t2.u, t1)
-        else if (t1 is Type.Fun && t2 is Type.Fun) {
-            unify(t1.arg, t2.arg).flatMap { s1 ->
-                unify(s1.apply(t1.result), s1.apply(t2.result)).map { s2 ->
-                    s2.compose(s1)
-                }
+    fun unify(t1: Type, t2: Type): Substitution {
+        return when {
+            t1 == t2 -> Substitution.empty
+            t1 is Type.Unknown -> varBind(t1.u, t2)
+            t2 is Type.Unknown -> varBind(t2.u, t1)
+            t1 is Type.Fun && t2 is Type.Fun -> try {
+                val s1 = unify(t1.arg, t2.arg)
+                val s2 = unify(s1.apply(t1.result), s1.apply(t2.result))
+                return s2.compose(s1)
+            } catch (err: TypeError.Unification) {
+                err.stack.add(t1 to t2)
+                throw err
             }
-        } else {
-            Either.Left(TypeError.Unification(t1, t2) as TypeError)
+            else -> throw TypeError.Unification(t1, t2, mutableListOf())
         }
     }
 
-    private fun varBind(u: Int, type: Type): Either<TypeError, Substitution> {
-        return if (type.unknowns().contains(u))
-            Either.Left(TypeError.OccursCheck(u, type))
-        else
-            Either.Right(Substitution(hashMap(u to type)))
+    fun <T> withSpannedError(span: Span, action: () -> T): T =
+        try {
+            action()
+        } catch (err: TypeError) {
+            err.span = err.span ?: span
+            throw err
+        }
+
+    private fun varBind(u: Int, type: Type): Substitution {
+        return if (type.unknowns().contains(u)) {
+            throw TypeError.OccursCheck(u, type)
+        } else {
+            Substitution(hashMap(u to type))
+        }
     }
 
     fun infer(ctx: TCContext, expr: Expression): Pair<Expression.Typed, Substitution> {
         val span = expr.span
-        val errorSentinel = Type.ErrorSentinel
-
         val tyWrap: (Expression, Type) -> Expression.Typed = { e, ty -> Expression.Typed(e, ty, span) }
 
         return when (expr) {
@@ -202,179 +211,114 @@ class Typechecker {
                     is Lit.Int -> Type.Int
                     is Lit.Bool -> Type.Bool
                 }
-
                 tyWrap(expr, t) to Substitution.empty
             }
             is Expression.Lambda -> {
                 val tyBinder = freshVar()
                 val tmpCtx = ctx.put(expr.binder, Scheme(emptyList(), tyBinder))
-                val (body, s) = this.infer(tmpCtx, expr.body)
-                if (body.type.isError()) {
+                val (body, s) = withSpannedError(expr.body.span) {
+                    this.infer(tmpCtx, expr.body)
+                }
+                s.apply(
                     tyWrap(
                         Expression.Lambda(expr.binder, body, span),
-                        errorSentinel
-                    ) to Substitution.empty
-                } else
-                    s.apply(
-                        tyWrap(
-                            Expression.Lambda(expr.binder, body, span),
-                            Type.Fun(tyBinder, body.type)
-                        )
-                    ) to s
+                        Type.Fun(tyBinder, body.type)
+                    )
+                ) to s
             }
             is Expression.Var -> {
                 val scheme = ctx.get(expr.name)
                 if (scheme.isDefined) {
+                    // If we try to look up a value that failed to type check before we immediately bail
+                    if (scheme.get().ty is Type.ErrorSentinel) throw TypeError.Followup()
                     val t = instantiate(scheme.get())
                     tyWrap(expr, t) to Substitution.empty
                 } else {
-                    reportError(TypeError.UnknownVar(expr.name), span)
-                    tyWrap(expr, errorSentinel) to Substitution.empty
+                    throw TypeError.UnknownVar(expr.name, span)
                 }
             }
             is Expression.App -> {
                 val tyRes = freshVar()
                 val (func, s1) = infer(ctx, expr.func)
                 val (arg, s2) = infer(s1.apply(ctx), expr.arg)
-
-                if (func.type.isError() || arg.type.isError()) {
-                    tyWrap(Expression.App(func, arg, span), errorSentinel) to Substitution.empty
-                } else {
-                    when (val res =
-                        unify(s2.apply(func.type), Type.Fun(arg.type, tyRes))) {
-                        is Either.Left -> {
-                            reportError(res.value, arg.span)
-                            tyWrap(Expression.App(func, arg, span), errorSentinel) to Substitution.empty
-                        }
-                        is Either.Right -> {
-                            val s = res.value.compose(s2).compose(s1)
-                            s.apply(
-                                tyWrap(Expression.App(func, arg, span), tyRes)
-                            ) to s
-                        }
-                    }
-                }
+                val s3 = withSpannedError(arg.span) { unify(s2.apply(func.type), Type.Fun(arg.type, tyRes)) }
+                val s = s3.compose(s2).compose(s1)
+                s.apply(tyWrap(Expression.App(func, arg, span), tyRes)) to s
             }
             is Expression.Typed -> {
                 val (tyExpr, s) = infer(ctx, expr.expr)
-                if (tyExpr.type.isError()) {
-                    tyWrap(tyExpr, errorSentinel) to Substitution.empty
-                } else {
-                    if (!expr.type.freeVars().isEmpty) { // TODO check wellformedness
-                        throw RuntimeException("not allowed")
-                    }
-                    when (val res = unify(tyExpr.type, expr.type)) {
-                        is Either.Left -> {
-                            reportError(res.value, span)
-                            tyWrap(tyExpr, errorSentinel) to Substitution.empty
-                        }
-                        is Either.Right -> {
-                            val s2 = res.value
-                            s2.apply(tyExpr) to s2.compose(s)
-                        }
-                    }
+                if (!expr.type.freeVars().isEmpty) { // TODO check wellformedness
+                    throw RuntimeException("not allowed")
                 }
+                val s2 = withSpannedError(span) { unify(tyExpr.type, expr.type) }
+                s2.apply(tyExpr) to s2.compose(s)
             }
             is Expression.Let -> {
                 val (tyBinder, s1) = infer(ctx, expr.expr)
                 val genBinder = generalize(tyBinder.type, s1.apply(ctx))
+
                 val tmpCtx = s1.apply(ctx.put(expr.binder, genBinder))
                 val (tyBody, s2) = infer(tmpCtx, s1.apply(expr.body))
 
                 val s = s2.compose(s1)
-
                 s.apply(tyWrap(Expression.Let(expr.binder, tyBinder, tyBody, span), tyBody.type)) to s
             }
             is Expression.If -> {
-                var hasError = false
                 val (tyCond, s1) = infer(ctx, expr.condition)
-
-                val s2 = when (val res = unify(tyCond.type, Type.Bool)) {
-                    is Either.Left -> {
-                        reportError(TypeError.IfCondition(tyCond.type), expr.condition.span)
-                        hasError = true
-                        Substitution.empty
-                    }
-                    is Either.Right -> res.value
+                val s2 = try {
+                    unify(tyCond.type, Type.Bool)
+                } catch (err: TypeError) {
+                    throw TypeError.IfCondition(tyCond.type, expr.condition.span)
                 }
-
                 val ctx = s2.apply(s1.apply(ctx))
+
                 val (tyThen, s3) = infer(ctx, expr.thenBranch)
                 val (tyElse, s4) = infer(s3.apply(ctx), expr.elseBranch)
 
-                val s5 = when (val res = unify(s4.apply(tyThen.type), tyElse.type)) {
-                    is Either.Left -> {
-                        reportError(res.value, span)
-                        hasError = true
-                        Substitution.empty
-                    }
-                    is Either.Right -> res.value
-                }
+                val s5 = withSpannedError(span) { unify(s4.apply(tyThen.type), tyElse.type) }
 
                 val s = s5.compose(s4).compose(s3).compose(s2).compose(s1)
-
-                val type = if (hasError)
-                    errorSentinel
-                else
-                    s.apply(tyThen.type)
-
-                s.apply(tyWrap(Expression.If(tyCond, tyThen, tyElse, span), type)) to s
+                s.apply(tyWrap(Expression.If(tyCond, tyThen, tyElse, span), tyThen.type)) to s
             }
 
-            is Expression.Construction -> when (val res = lookupDtor(expr.type, expr.dtor)) {
-                is Either.Left -> {
-                    reportError(res.value, Span(expr.type.span.start, expr.dtor.span.end))
-                    tyWrap(expr, errorSentinel) to Substitution.empty
+            is Expression.Construction -> {
+                val fields = withSpannedError(Span(expr.type.span.start, expr.dtor.span.end)) {
+                    lookupDtor(expr.type, expr.dtor)
                 }
-                is Either.Right -> {
-                    val fields = res.value
-                    var hasError = false
-                    val typedFields = mutableListOf<Expression.Typed>()
-                    var s = Substitution.empty
 
-                    expr.exprs.zip(fields).forEach { (e, f) ->
-                        val (t, s1) = infer(ctx, s.apply(e))
+                val typedFields = mutableListOf<Expression.Typed>()
+                var s = Substitution.empty
 
-                        when (val res = unify(t.type, f)) {
-                            is Either.Left -> {
-                                reportError(res.value, e.span)
-                                hasError = true
-                                typedFields.add(t)
-                            }
-                            is Either.Right -> {
-                                s = res.value.compose(s1).compose(s)
-                                typedFields.add(s.apply(t))
-                            }
-                        }
-                    }
+                expr.exprs.zip(fields).forEach { (e, f) ->
+                    val (t, s1) = withSpannedError(e.span) { infer(ctx, s.apply(e)) }
+                    val s2 = withSpannedError(e.span) { unify(t.type, f) }
+                    typedFields.add(s2.apply(t))
+                    s = s2.compose(s1).compose(s)
+                }
 
-                    val type = if (hasError) {
-                        errorSentinel
-                    } else {
+                s.apply(
+                    tyWrap(
+                        Expression.Construction(expr.type, expr.dtor, typedFields, span),
                         Type.Constructor(expr.type)
-                    }
-
-                    tyWrap(Expression.Construction(expr.type, expr.dtor, typedFields, span), type) to s
-                }
+                    )
+                ) to s
             }
             is Expression.Match ->
-                tyWrap(expr, errorSentinel) to Substitution.empty
+                tyWrap(expr, Type.ErrorSentinel) to Substitution.empty
         }
     }
 
-    fun lookupDtor(type: Name, dtor: Name): Either<TypeError, List<Type>> {
-        val dtors = types[type] ?: return Either.Left(TypeError.UnknownType(type))
-        val dc = dtors.find { it.name == dtor } ?: return Either.Left(TypeError.UnknownDtor(type, dtor))
-        return Either.Right(dc.fields)
+    fun lookupDtor(type: Name, dtor: Name): List<Type> {
+        val dtors = types[type] ?: throw TypeError.UnknownType(type)
+        val dc = dtors.find { it.name == dtor } ?: throw TypeError.UnknownDtor(type, dtor)
+        return dc.fields
     }
 
     fun inferExpr(expr: Expression): Scheme {
-        val (t, s) = this.infer(initialContext, expr)
-        if (this.errors.isNotEmpty()) {
-            this.errors.forEach {
-                println("error: ${it.value.pretty()} ${if (it.span == Span.DUMMY) "" else it.span.toString()}")
-            }
-            println("inferred AST: ${t.pretty()}")
+        val (t, s) = try {
+            this.infer(initialContext, expr)
+        } catch (err: TypeError) {
+            println("error: ${err.pretty()} ${if (err.span == Span.DUMMY) "" else err.span.toString()}")
             throw RuntimeException("type errors occurred")
         }
         println("inferred AST: ${t.pretty()}")
@@ -383,26 +327,27 @@ class Typechecker {
 
     fun inferSourceFile(file: SourceFile): HashMap<Name, Scheme> {
         var ctx = initialContext
+        var errored = false
 
         file.typeDeclarations().forEach {
             types.putIfAbsent(it.name, it.dataConstructors)
         }
 
         file.valueDeclarations().forEach {
-            val (t, s) = this.infer(ctx, it.expr)
-            // TODO compare user scheme with inferred scheme
-
-            if (this.errors.isNotEmpty()) {
-                this.errors.forEach {
-                    println("error: ${it.value.pretty()} ${if (it.span == Span.DUMMY) "" else it.span.toString()}")
+            try {
+                val (t, s) = this.infer(ctx, it.expr)
+                val scheme = generalize(s.apply(t.type), ctx)
+                ctx = ctx.put(it.name, scheme)
+            } catch (err: TypeError) {
+                errored = true
+                if (err !is TypeError.Followup) {
+                    println("error ${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}")
                 }
-                println("inferred AST: ${t.pretty()}")
-                throw RuntimeException("type errors occurred")
+                ctx = ctx.put(it.name, Scheme.fromType(Type.ErrorSentinel))
             }
-            println("inferred AST: ${t.pretty()}")
-            val scheme = generalize(s.apply(t.type), ctx)
-            ctx = ctx.put(it.name, scheme)
         }
+
+        if (errored) throw Exception("Type errors occurred")
 
         return ctx.removeAll(initialContext.keysIterator())
     }

@@ -78,12 +78,20 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     fun parseTypeDeclaration(): Declaration.Type {
         val startPosition = iterator.next().span.start
         val name = parseUpperName()
+        var tyArgs = emptyList<TyVar>()
+
+        if (iterator.peek().value is Token.LAngle) {
+            iterator.next()
+
+            tyArgs = commaSeparated(::parseTyVar) { it !is Token.RAngle }
+            expectNext<Token.RAngle>(expectedError("expected closing angle"))
+        }
 
         expectNext<Token.LBrace>(expectedError("expected open brace"))
         val dataConstructors = commaSeparated(::parseDataConstructor) { it !is Token.RBrace }
         val endPosition = expectNext<Token.RBrace>(expectedError("expected closing brace")).span.end
 
-        return Declaration.Type(name, dataConstructors, Span(startPosition, endPosition))
+        return Declaration.Type(name, tyArgs, dataConstructors, Span(startPosition, endPosition))
     }
 
     fun parseDataConstructor(): DataConstructor {
@@ -121,7 +129,16 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             }
             is Token.UpperIdent -> {
                 val name = parseUpperName()
-                Type.Constructor(name)
+                var tyArgs = emptyList<Type>()
+
+                if (iterator.peek().value is Token.LAngle) {
+                    iterator.next()
+
+                    tyArgs = commaSeparated(::parseType) { it !is Token.RAngle }
+                    expectNext<Token.RAngle>(expectedError("expected closing angle"))
+                }
+
+                Type.Constructor(name, tyArgs)
             }
             is Token.Ident -> {
                 Type.Var(parseTyVar())

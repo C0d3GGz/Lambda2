@@ -15,6 +15,8 @@ sealed class Token {
     object RParen : Token()
     object LBrace : Token()
     object RBrace : Token()
+    object LAngle: Token()
+    object RAngle: Token()
     object Lam : Token()
     object Dot : Token()
     object Comma : Token()
@@ -93,6 +95,8 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             ')' -> RParen to 1
             '{' -> LBrace to 1
             '}' -> RBrace to 1
+            '<' -> LAngle to 1
+            '>' -> RAngle to 1
             '\\' -> Lam to 1
             '.' -> Dot to 1
             ';' -> Semicolon to 1

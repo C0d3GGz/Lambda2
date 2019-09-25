@@ -19,7 +19,7 @@ sealed class Type {
         }
 
     object ErrorSentinel : Type()
-    data class Constructor(val name: Name) : Type()
+    data class Constructor(val name: Name, val tyArgs: List<Type> = emptyList()) : Type()
     data class Var(val v: TyVar) : Type()
     data class Unknown(val u: Int) : Type() {
         override fun toString(): String = "u$u"

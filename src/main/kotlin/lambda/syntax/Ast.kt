@@ -1,9 +1,6 @@
 package lambda.syntax
 
-import lambda.Scheme
-import lambda.Span
-import lambda.Spanned
-import lambda.Type
+import lambda.*
 
 data class SourceFile(val declarations: List<Declaration>, val span: Span) {
     fun typeDeclarations(): List<Declaration.Type> {
@@ -29,6 +26,7 @@ sealed class Declaration {
 
     data class Type(
         val name: Name,
+        val tyArgs: List<TyVar>,
         val dataConstructors: List<DataConstructor>,
         override val span: Span
     ) : Declaration()

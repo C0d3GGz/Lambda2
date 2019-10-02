@@ -38,7 +38,13 @@ data class Substitution(val subst: HashMap<Int, Type>) {
             is Expression.Lambda -> Expression.Lambda(expr.binder, apply(expr.body), expr.sp)
             is Expression.App -> Expression.App(apply(expr.func), apply(expr.arg), expr.sp)
             is Expression.Typed -> apply(expr)
-            is Expression.Let -> Expression.Let(expr.recursive, expr.binder, apply(expr.expr), apply(expr.body), expr.sp)
+            is Expression.Let -> Expression.Let(
+                expr.recursive,
+                expr.binder,
+                apply(expr.expr),
+                apply(expr.body),
+                expr.sp
+            )
             is Expression.If -> Expression.If(
                 apply(expr.condition),
                 apply(expr.thenBranch),
@@ -113,6 +119,20 @@ private val initialContext: TCContext
                     Type.Fun(Type.Int, Type.Bool)
                 )
             ),
+            Name("concat") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.String,
+                    Type.Fun(Type.String, Type.String)
+                )
+            ),
+            Name("int_to_string") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.Int,
+                    Type.String
+                )
+            ),
             Name("identity") to Scheme(
                 listOf(TyVar(Name("a"))),
                 Type.Fun(Type.v("a"), Type.v("a"))
@@ -141,7 +161,8 @@ class Typechecker {
 
     val types: MutableMap<Name, TypeInfo> = mutableMapOf(
         Name("Int") to TypeInfo.empty,
-        Name("Bool") to TypeInfo.empty
+        Name("Bool") to TypeInfo.empty,
+        Name("String") to TypeInfo.empty
     )
 
     fun freshUnknown(): Type.Unknown = Type.Unknown(++fresh)
@@ -233,6 +254,7 @@ class Typechecker {
                 val t = when (expr.lit) {
                     is Lit.Int -> Type.Int
                     is Lit.Bool -> Type.Bool
+                    is Lit.String -> Type.String
                 }
 
                 tyWrap(expr, t)
@@ -277,10 +299,13 @@ class Typechecker {
             }
             is Expression.Let -> {
                 val tyBinder = if (expr.recursive) {
+                    val binderUnknown = freshUnknown()
                     val recCtx = HashMap(ctx)
-                    recCtx[expr.binder] = Scheme.fromType(freshUnknown())
+                    recCtx[expr.binder] = Scheme.fromType(binderUnknown)
 
-                    infer(recCtx, expr.expr)
+                    val binder = infer(recCtx, expr.expr)
+                    unify(binderUnknown, binder.type)
+                    binder
                 } else {
                     infer(ctx, expr.expr)
                 }
@@ -393,7 +418,7 @@ class Typechecker {
             try {
                 reset()
                 val t = zonk(infer(ctx, it.expr))
-                println(this.substitution.toString())
+                // println(this.substitution.toString())
                 val scheme = generalize(t.type, ctx)
                 ctx[it.name] = scheme
             } catch (err: TypeError) {

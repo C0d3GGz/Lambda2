@@ -1,6 +1,5 @@
 package lambda
 
-import com.ibm.icu.impl.coll.BOCSU
 import lambda.Token.Companion.get
 import lambda.syntax.*
 
@@ -177,6 +176,11 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return Expression.Literal(Lit.Bool(boolToken.bool, span))
     }
 
+    fun parseString(): Expression.Literal {
+        val (span, stringToken) = expectNext<Token.StringToken>(expectedError("expected string literal"))
+        return Expression.Literal(Lit.String(stringToken.string, span))
+    }
+
 
     fun parseLambda(): Expression.Lambda {
         val (start, _) = iterator.next()
@@ -231,6 +235,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             is Token.UpperIdent -> parseDataConstruction()
             is Token.IntToken -> parseInt()
             is Token.BoolToken -> parseBool()
+            is Token.StringToken -> parseString()
             is Token.Let -> parseLet(false)
             is Token.LetRec -> parseLet(true)
             is Token.If -> parseIf()

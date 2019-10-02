@@ -1,7 +1,5 @@
 package lambda
 
-import io.vavr.kotlin.component1
-import io.vavr.kotlin.component2
 import lambda.syntax.*
 
 private object Pretty {
@@ -10,6 +8,7 @@ private object Pretty {
         return when (lit) {
             is Lit.Int -> lit.int.toString()
             is Lit.Bool -> lit.bool.toString()
+            is Lit.String -> "\"${lit.string}\""
         }
     }
 

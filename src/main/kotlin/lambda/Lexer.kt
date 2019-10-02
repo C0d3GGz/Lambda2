@@ -30,6 +30,7 @@ sealed class Token {
     data class UpperIdent(val ident: String) : Token()
     data class IntToken(val int: Int) : Token()
     data class BoolToken(val bool: Boolean) : Token()
+    data class StringToken(val string: String) : Token()
     object EOF : Token()
     object Let : Token()
     object LetRec : Token()
@@ -118,6 +119,7 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             '-' -> if (iterator.next() == '>') Arrow to 2 else {
                 throw RuntimeException()
             }
+            '"' -> stringLiteral()
             else -> {
                 if (c.isJavaIdentifierStart()) ident(c)
                 else if (c.isDigit()) intLiteral(c)
@@ -136,6 +138,14 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             result += iterator.next()
         }
         return IntToken(result.toInt()) to result.length
+    }
+    private fun stringLiteral(): Pair<Token, Int> {
+        var result = ""
+        while (iterator.hasNext() && iterator.peek() != '"') {
+            result += iterator.next()
+        }
+        iterator.next()
+        return StringToken(result) to result.length + 2
     }
 
     private fun consumeWhitespace() {

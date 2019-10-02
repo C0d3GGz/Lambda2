@@ -9,10 +9,12 @@ sealed class Lit {
         get() = when (this) {
             is Int -> sp
             is Bool -> sp
+            is String -> sp
         }
 
     data class Int(val int: kotlin.Int, val sp: Span = Span.DUMMY) : Lit()
     data class Bool(val bool: Boolean, val sp: Span = Span.DUMMY) : Lit()
+    data class String(val string: kotlin.String, val sp: Span = Span.DUMMY) : Lit()
 }
 
 sealed class Expression {

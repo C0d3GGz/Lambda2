@@ -64,6 +64,7 @@ sealed class Type {
         fun v(name: String) = Var(TyVar(Name(name)))
         val Int = Constructor(Name("Int"))
         val Bool = Constructor(Name("Bool"))
+        val String = Constructor(Name("String"))
     }
 }
 

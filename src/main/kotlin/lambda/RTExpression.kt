@@ -26,19 +26,19 @@ sealed class RTExpression {
     data class Case(val tag: Int, val binders: List<Name>, val body: RTExpression)
 }
 
-// (\x. x 1 2) : ?
-// (\f. \g. f g) : ?
-// (\x. x) (\y. y) 1 : ?
-// (\x. x) 1 : ?
-// (\f. add 1 (f 3)) : ?
-// (\f. f (add 1) 1) : ?
-// (\f. \g. g (f 1) 1) : ?
-
 fun matchIntLiteral(expr: RTExpression): Int {
     if (expr is RTExpression.Literal && expr.lit is Lit.Int) {
         return expr.lit.int
     } else {
         throw EvalException("$expr is not an Int")
+    }
+}
+
+fun matchStringLiteral(expr: RTExpression): String {
+    if (expr is RTExpression.Literal && expr.lit is Lit.String) {
+        return expr.lit.string
+    } else {
+        throw EvalException("$expr is not a String")
     }
 }
 
@@ -69,6 +69,21 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                         Lit.Bool(
                             matchIntLiteral(ctx[Name("x")]!!)
                                     == matchIntLiteral(ctx[Name("y")]!!)
+                        )
+                    )
+                }
+                Name("#concat") -> {
+                    RTExpression.Literal(
+                        Lit.String(
+                            matchStringLiteral(ctx[Name("x")]!!)
+                                    + matchStringLiteral(ctx[Name("y")]!!)
+                        )
+                    )
+                }
+                Name("#int_to_string") -> {
+                    RTExpression.Literal(
+                        Lit.String(
+                            matchIntLiteral(ctx[Name("x")]!!).toString()
                         )
                     )
                 }
@@ -176,6 +191,22 @@ private fun initialContext(): Context {
             ),
             hashMapOf()
         )
+    val primConcat: RTExpression =
+        RTExpression.Closure(
+            Name("x"),
+            RTExpression.Lambda(
+                Name("y"),
+                RTExpression.Var(Name("#concat"))
+            ),
+            hashMapOf()
+        )
+
+    val primint_to_string: RTExpression =
+        RTExpression.Closure(
+            Name("x"),
+            RTExpression.Var(Name("#int_to_string")),
+            hashMapOf()
+        )
 
     // Z = λf· (λx· f (λy· x x y)) (λx· f (λy· x x y))
 
@@ -210,6 +241,8 @@ private fun initialContext(): Context {
         Name("add") to primAdd,
         Name("sub") to primSub,
         Name("eq") to primEq,
+        Name("concat") to primConcat,
+        Name("int_to_string") to primint_to_string,
         Name("fix") to z
     )
 }

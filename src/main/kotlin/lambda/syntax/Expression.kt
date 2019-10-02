@@ -24,7 +24,7 @@ sealed class Expression {
         override fun withSpan(span: Span) = Spanned(span, this)
     }
 
-    data class Let(val binder: Name, val expr: Expression, val body: Expression, val sp: Span) :
+    data class Let(val recursive: Boolean, val binder: Name, val expr: Expression, val body: Expression, val sp: Span) :
         Expression()
 
     data class If(

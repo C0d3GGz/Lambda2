@@ -1,5 +1,6 @@
 package lambda
 
+import com.ibm.icu.impl.coll.BOCSU
 import lambda.Token.Companion.get
 import lambda.syntax.*
 
@@ -230,7 +231,8 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             is Token.UpperIdent -> parseDataConstruction()
             is Token.IntToken -> parseInt()
             is Token.BoolToken -> parseBool()
-            is Token.Let -> parseLet()
+            is Token.Let -> parseLet(false)
+            is Token.LetRec -> parseLet(true)
             is Token.If -> parseIf()
             is Token.Match -> parseMatch()
             else -> null
@@ -263,7 +265,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return Expression.Case(typeName, dtorName, binders, body, Span(typeName.span.start, body.span.end))
     }
 
-    private fun parseLet(): Expression.Let {
+    private fun parseLet(recursive: Boolean): Expression.Let {
         val (letSpan, _) = iterator.next()
         val binder = parseName()
         expectNext<Token.Equals>(expectedError("expected equals"))
@@ -271,7 +273,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         expectNext<Token.In>(expectedError("expected in"))
         val body = parseExpression()
 
-        return Expression.Let(binder, expr, body, Span(letSpan.start, body.span.end))
+        return Expression.Let(recursive, binder, expr, body, Span(letSpan.start, body.span.end))
     }
 
     private fun parseIf(): Expression.If { // if true then 3 else 4

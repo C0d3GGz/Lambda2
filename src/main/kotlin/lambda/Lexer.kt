@@ -32,6 +32,7 @@ sealed class Token {
     data class BoolToken(val bool: Boolean) : Token()
     object EOF : Token()
     object Let : Token()
+    object LetRec : Token()
     object In : Token()
     object Type : Token()
     object Forall : Token()
@@ -152,6 +153,7 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             "true" -> BoolToken(true)
             "false" -> BoolToken(false)
             "let" -> Let
+            "letrec" -> LetRec
             "in" -> In
             "if" -> If
             "then" -> Then

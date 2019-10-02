@@ -85,20 +85,6 @@ private object Pretty {
         else "forall ${scheme.vars.joinToString(" ")}. ${scheme.ty.pretty()}"
     }
 
-    fun prettyPrintEvalExpr(expr: EvalExpression, depth: Int): String {
-        return when (expr) {
-            is EvalExpression.Literal -> prettyPrintLiteral(expr.lit)
-            is EvalExpression.Var -> expr.name.toString()
-            is EvalExpression.Lambda -> "(\\${expr.binder}. ${expr.body.pretty()})"
-            is EvalExpression.App -> {
-                val output = "${prettyPrintEvalExpr(expr.func, depth)} ${prettyPrintEvalExpr(expr.arg, depth + 1)}"
-                return if (depth > 0) "($output)" else output
-            }
-            is EvalExpression.Typed -> "(${expr.expr.pretty()} : ${expr.type.pretty()})"
-            is EvalExpression.Let -> "let ${expr.binder} = ${expr.expr.pretty()} in ${expr.body.pretty()}"
-            is EvalExpression.If -> "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
-        }
-    }
 
     fun prettyPrintCase(case: Expression.Case): String {
         return "${case.type}::${case.dtor}(${case.binders.joinToString(", ")}) => ${case.body.pretty()}"
@@ -110,7 +96,6 @@ private object Pretty {
 }
 
 fun Expression.pretty() = Pretty.prettyPrintExpr(this, 0)
-fun EvalExpression.pretty() = Pretty.prettyPrintEvalExpr(this, 0)
 fun RTExpression.pretty() = Pretty.prettyPrintRTExpr(this, 0)
 fun Context.pretty() = Pretty.prettyContext(this)
 fun Type.pretty() = Pretty.prettyPrintType(this, 0)

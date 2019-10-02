@@ -4,6 +4,10 @@ type List<a> {
 }
 
 let main: Int =
-  \l. match l {
-    List::Cons(h, t) => eq 3 h
-  };
+  letrec sum = \xs.
+    match xs {
+      List::Cons(h, t) => add h (sum t),
+      List::Nil() => 0
+    } in
+
+    sum List::Cons(1, List::Nil());

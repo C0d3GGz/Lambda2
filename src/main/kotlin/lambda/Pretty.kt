@@ -69,7 +69,7 @@ private object Pretty {
 
     fun prettyPrintType(type: Type, depth: Int): String {
         return when (type) {
-            is Type.Constructor -> "${type.name}"
+            is Type.Constructor -> "${type.name}${if (type.tyArgs.isEmpty()) "" else "<${type.tyArgs.joinToString(", ") { it.pretty() }}>"}"
             is Type.Var -> "${type.v.name}"
             is Type.Fun -> {
                 val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"

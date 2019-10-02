@@ -16,8 +16,9 @@ data class Substitution(val subst: HashMap<Int, Type>) {
 
     fun apply(type: Type): Type {
         return when (type) {
-            is Type.Constructor, Type.ErrorSentinel -> type
+            is Type.ErrorSentinel -> type
             is Type.Var -> type
+            is Type.Constructor -> Type.Constructor(type.name, type.tyArgs.map(::apply))
             is Type.Fun -> Type.Fun(apply(type.arg), apply(type.result))
             is Type.Unknown -> subst[type.u].fold(type, ::apply)
         }
@@ -122,15 +123,21 @@ private val initialContext: TCContext
         )
     }
 
+data class TypeInfo(val typeArgs: List<TyVar>, val dtors: List<DataConstructor>) {
+    companion object {
+        val empty = TypeInfo(emptyList(), emptyList())
+    }
+}
+
 class Typechecker {
 
     private var fresh: Int = 0
 
     private val substitution: Substitution = Substitution.empty
 
-    val types: MutableMap<Name, List<DataConstructor>> = mutableMapOf(
-        Name("Int") to emptyList(),
-        Name("Bool") to emptyList()
+    val types: MutableMap<Name, TypeInfo> = mutableMapOf(
+        Name("Int") to TypeInfo.empty,
+        Name("Bool") to TypeInfo.empty
     )
 
     fun freshVar(): Type.Unknown = Type.Unknown(++fresh)
@@ -171,6 +178,15 @@ class Typechecker {
             t1 is Type.Fun && t2 is Type.Fun -> try {
                 unify(t1.arg, t2.arg)
                 unify(t1.result, t2.result)
+            } catch (err: TypeError.Unification) {
+                err.stack.add(t1 to t2)
+                throw err
+            }
+            t1 is Type.Constructor &&
+                    t2 is Type.Constructor &&
+                    t1.name == t2.name &&
+                    t1.tyArgs.size == t2.tyArgs.size -> try {
+                t1.tyArgs.zip(t2.tyArgs).forEach { unify(it.first, it.second) }
             } catch (err: TypeError.Unification) {
                 err.stack.add(t1 to t2)
                 throw err
@@ -284,21 +300,22 @@ class Typechecker {
             }
 
             is Expression.Construction -> {
-                val fields = withSpannedError(Span(expr.type.span.start, expr.dtor.span.end)) {
+                val (tyArgs, fields) = withSpannedError(Span(expr.type.span.start, expr.dtor.span.end)) {
                     lookupDtor(expr.type, expr.dtor)
                 }
 
                 val typedFields = mutableListOf<Expression.Typed>()
+                val freshTyArgs = tyArgs.map { it to freshVar() }
 
                 expr.exprs.zip(fields).forEach { (e, f) ->
                     val t = withSpannedError(e.span) { infer(ctx, e) }
-                    withSpannedError(e.span) { unify(t.type, f) }
+                    withSpannedError(e.span) { unify(t.type, f.substMany(freshTyArgs)) }
                     typedFields += t
                 }
 
                 tyWrap(
                     Expression.Construction(expr.type, expr.dtor, typedFields, span),
-                    Type.Constructor(expr.type)
+                    Type.Constructor(expr.type, freshTyArgs.map { it.second })
                 )
             }
             is Expression.Match -> {
@@ -328,13 +345,14 @@ class Typechecker {
 
     fun inferPattern(type: Name, dtor: Name, binders: List<Name>, tyExpr: Type): List<Pair<Name, Type>> {
         unify(Type.Constructor(type), tyExpr)
-        return binders.zip(lookupDtor(type, dtor))
+        val (_, fields) = lookupDtor(type, dtor)
+        return binders.zip(fields)
     }
 
-    fun lookupDtor(type: Name, dtor: Name): List<Type> {
-        val dtors = types[type] ?: throw TypeError.UnknownType(type)
-        val dc = dtors.find { it.name == dtor } ?: throw TypeError.UnknownDtor(type, dtor)
-        return dc.fields
+    fun lookupDtor(type: Name, dtor: Name): Pair<List<TyVar>, List<Type>> {
+        val typeInfo = types[type] ?: throw TypeError.UnknownType(type)
+        val dc = typeInfo.dtors.find { it.name == dtor } ?: throw TypeError.UnknownDtor(type, dtor)
+        return typeInfo.typeArgs to dc.fields
     }
 
     fun inferExpr(expr: Expression): Scheme {
@@ -354,7 +372,7 @@ class Typechecker {
         var errored = false
 
         file.typeDeclarations().forEach {
-            types.putIfAbsent(it.name, it.dataConstructors)
+            types.putIfAbsent(it.name, TypeInfo(it.tyArgs, it.dataConstructors))
         }
 
         file.valueDeclarations().forEach {

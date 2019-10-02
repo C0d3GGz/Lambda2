@@ -51,7 +51,8 @@ sealed class Type {
         return when (this) {
             is Var -> if (v == tyVar) type else this
             is Fun -> Fun(arg.subst(tyVar, type), result.subst(tyVar, type), sp)
-            ErrorSentinel, is Constructor, is Unknown -> this
+            is Constructor -> Type.Constructor(name, tyArgs.map { it.subst(tyVar, type) })
+            ErrorSentinel, is Unknown -> this
         }
     }
 

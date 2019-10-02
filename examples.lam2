@@ -3,6 +3,13 @@ type List<a> {
   Nil()
 }
 
+let map: Int =
+  letrec map = \f. \xs.
+    match xs {
+      List::Cons(h, t) => List::Cons(f h, map f t),
+      List::Nil() => List::Nil()
+    } in map;
+
 let main: Int =
   letrec sum = \xs.
     match xs {
@@ -10,4 +17,4 @@ let main: Int =
       List::Nil() => 0
     } in
 
-    sum List::Cons(1, List::Nil());
+    map (add 2) List::Cons(1, List::Nil());

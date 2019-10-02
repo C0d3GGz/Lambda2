@@ -64,6 +64,8 @@ private object Pretty {
                 "Pack { tag: ${expr.tag}, arity: ${expr.arity}, data: [${expr.data.joinToString(", ") { it.pretty() }}]}"
             is RTExpression.Match ->
                 "match ${expr.expr.pretty()} {${expr.cases.joinToString(", ") { it.pretty() }}}"
+            is RTExpression.LetRec ->
+                "letrec ${expr.binder} = ${expr.expr.pretty()} in ${expr.body.pretty()}"
         }
     }
 

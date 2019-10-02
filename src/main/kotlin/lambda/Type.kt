@@ -40,7 +40,8 @@ sealed class Type {
 
     fun unknowns(): HashSet<Int> {
         return when (this) {
-            is Constructor, ErrorSentinel -> hashSet()
+            is ErrorSentinel -> hashSet()
+            is Constructor -> tyArgs.fold(hashSet(), { acc, arg -> acc.union(arg.unknowns()) })
             is Var -> hashSet()
             is Fun -> arg.unknowns().union(result.unknowns())
             is Unknown -> hashSet(u)

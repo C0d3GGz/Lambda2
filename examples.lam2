@@ -4,6 +4,6 @@ type List<a> {
 }
 
 let main: Int =
-  let cons = \x. \xs. List::Cons(x, xs) in
-  let l = cons 1 (cons 2 (cons 3 (cons 4 List::Nil()))) in
-  l;
+  \l. match l {
+    List::Cons(h, t) => eq 3 h
+  };

@@ -53,6 +53,10 @@ data class Substitution(val subst: HashMap<Int, Type>) {
     fun apply(expr: Expression.Typed): Expression.Typed =
         Expression.Typed(apply(expr.expr), apply(expr.type), expr.sp)
 
+    override fun toString(): String {
+        return "{ " + subst.toList().joinToString("\n, ") { (u, ty) -> "u$u ↦ ${ty.pretty()}" } + "\n}"
+    }
+
     companion object {
         val empty = Substitution(hashMapOf())
     }
@@ -344,9 +348,11 @@ class Typechecker {
     }
 
     fun inferPattern(type: Name, dtor: Name, binders: List<Name>, tyExpr: Type): List<Pair<Name, Type>> {
-        unify(Type.Constructor(type), tyExpr)
-        val (_, fields) = lookupDtor(type, dtor)
-        return binders.zip(fields)
+        val (tyArgs, fields) = lookupDtor(type, dtor)
+        val freshTyArgs = tyArgs.map { it to freshVar() }
+        unify(Type.Constructor(type, freshTyArgs.map { it.second }), tyExpr)
+
+        return binders.zip(fields.map { it.substMany(freshTyArgs) })
     }
 
     fun lookupDtor(type: Name, dtor: Name): Pair<List<TyVar>, List<Type>> {
@@ -379,6 +385,7 @@ class Typechecker {
             try {
                 reset()
                 val t = zonk(infer(ctx, it.expr))
+                println(this.substitution.toString())
                 val scheme = generalize(t.type, ctx)
                 ctx[it.name] = scheme
             } catch (err: TypeError) {

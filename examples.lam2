@@ -3,18 +3,96 @@ type List<a> {
   Nil()
 }
 
-let map: Int =
-  letrec map = \f. \xs.
-    match xs {
-      List::Cons(h, t) => List::Cons(f h, map f t),
-      List::Nil() => List::Nil()
-    } in map;
+type Cell {
+  T(Int, Int)
+}
 
-let main: Int =
-  letrec sum = \xs.
-    match xs {
-      List::Cons(h, t) => add h (sum t),
-      List::Nil() => 0
-    } in
+type Unit {
+  T()
+}
 
-    map (add 2) List::Cons(1, List::Nil());
+let void: forall a. a -> Unit = \x. Unit::T();
+
+let const: forall a b. a -> b -> a = \a. \b. a;
+
+let map : forall a b. (a -> b) -> List<a> -> List<b> =
+  letrec map = \f. \xs. match xs {
+    List::Nil() => List::Nil(),
+    List::Cons(h, t) => List::Cons(f h, map f t),
+  } in
+  map;
+
+let map_index: forall a b. (Int -> a -> b) -> List<a> -> List<b> =
+  letrec mapi = \i. \f. \xs. match xs {
+    List::Nil() => List::Nil(),
+    List::Cons(h, t) => List::Cons(f i h, mapi (add 1 i) f t),
+  } in
+  mapi 0;
+
+let foldr : forall a b. (a -> b -> a) -> a -> List<b> -> a =
+  letrec foldr = \f. \acc. \xs. match xs {
+    List::Nil() => acc,
+    List::Cons(h, t) => foldr f (f acc h) t
+  } in
+  foldr;
+
+let foldl : forall a b. (a -> b -> b) -> b -> List<a> -> b =
+  letrec foldl = \f. \acc. \xs. match xs {
+    List::Nil() => acc,
+    List::Cons(h, t) => f h (foldl f acc t)
+  } in
+  foldl;
+
+let length : forall a. List<a> -> Int =
+  foldl (const (add 1)) 0;
+
+let reverse : Int =
+  foldr (\xs. \x. List::Cons(x, xs)) List::Nil();
+
+let list_concat : forall a. List<a> -> List<a> -> List<a> =
+  \xs. \ys. foldl (\x. \acc. List::Cons(x, acc)) ys xs;
+
+let list_to_string : forall a. (a -> String) -> List<a> -> String =
+  \format. \xs.
+    match xs {
+      List::Nil() => "[]",
+      List::Cons(h, t) =>
+        let els = foldr (\acc. \el. concat (concat acc ", ") (format el)) (format h) t in
+        concat "[ " (concat els " ]")
+    };
+
+let repeat: forall a. Int -> a -> List<a> =
+  \n. \a.
+    letrec go = \n.
+      if eq n 0 then
+        List::Nil()
+      else
+        List::Cons(a, go (sub n 1)) in
+    go n;
+
+let print_column: List<Bool> -> Unit =
+  \col.
+    let bool_to_string = \x. if x then "X" else "O" in
+    void (print (list_to_string bool_to_string col));
+
+let print_world: List<List<Bool>> -> Unit =
+  \world.
+    void (map print_column world);
+
+let modify_at: forall a. Int -> (a -> a) -> List<a> -> List<a> =
+  \x. \f.
+    map_index \i. \e. if eq i x then f e else e;
+
+let set_cell: Int -> Int -> Bool -> List<List<Bool>> -> List<List<Bool>> =
+  \x. \y. \new.
+    modify_at x (modify_at y (const new));
+
+let main: Unit =
+  let col = repeat 5 false in
+  let world = repeat 5 col in
+  let new_world =
+    set_cell 1 2 true
+    (set_cell 2 2 true
+    (set_cell 3 2 true world)) in
+
+  print_world new_world;

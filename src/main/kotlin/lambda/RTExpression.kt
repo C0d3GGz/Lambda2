@@ -87,6 +87,16 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                         )
                     )
                 }
+                Name("#sleep") -> {
+                    val x = matchIntLiteral(ctx[Name("x")]!!)
+                    Thread.sleep(x.toLong())
+                    RTExpression.Pack(1, emptyList())
+                }
+                Name("#print") -> {
+                    val x = matchStringLiteral(ctx[Name("x")]!!)
+                    println(x)
+                    RTExpression.Pack(1, emptyList())
+                }
                 else -> ctx[expr.name] ?: throw EvalException("${expr.name} was undefined.")
             }
         }
@@ -237,13 +247,27 @@ private fun initialContext(): Context {
             hashMapOf()
         )
 
+    val primSleep = RTExpression.Closure(
+        Name("x"),
+        RTExpression.Var(Name("#sleep")),
+        hashMapOf()
+    )
+
+    val primPrint = RTExpression.Closure(
+        Name("x"),
+        RTExpression.Var(Name("#print")),
+        hashMapOf()
+    )
+
     return hashMapOf(
         Name("add") to primAdd,
         Name("sub") to primSub,
         Name("eq") to primEq,
         Name("concat") to primConcat,
         Name("int_to_string") to primint_to_string,
-        Name("fix") to z
+        Name("fix") to z,
+        Name("sleep") to primSleep,
+        Name("print") to primPrint
     )
 }
 

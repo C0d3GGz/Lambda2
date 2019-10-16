@@ -65,6 +65,7 @@ sealed class Type {
         val Int = Constructor(Name("Int"))
         val Bool = Constructor(Name("Bool"))
         val String = Constructor(Name("String"))
+        val Unit = Constructor(Name("Unit"))
     }
 }
 

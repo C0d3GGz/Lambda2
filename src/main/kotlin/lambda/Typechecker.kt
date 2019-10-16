@@ -143,6 +143,20 @@ private val initialContext: TCContext
                     Type.Fun(Type.v("a"), Type.v("a")),
                     Type.v("a")
                 )
+            ),
+            Name("sleep") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.Int,
+                    Type.Unit
+                )
+            ),
+            Name("print") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.String,
+                    Type.Unit
+                )
             )
         )
     }

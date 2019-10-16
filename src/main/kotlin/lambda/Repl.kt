@@ -19,7 +19,7 @@ fun runFile(file: File) {
 
         try {
             val loweredExprs = Lowering().lowerSourceFile(sf)
-            loweredExprs.forEach { println("Evaluating ${it.first.value} = ${it.second.pretty()}") }
+            // loweredExprs.forEach { println("Evaluating ${it.first.value} = ${it.second.pretty()}") }
             val result = evalExprs(loweredExprs)
             println(result.pretty())
         } catch (e: Exception) {

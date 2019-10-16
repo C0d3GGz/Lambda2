@@ -5,7 +5,7 @@ type List<a> {
 
 let map : forall a b. (a -> b) -> List<a> -> List<b> =
   letrec map = \f. \xs. match xs {
-    List::Nil() => xs,
+    List::Nil() => List::Nil(),
     List::Cons(h, t) => List::Cons(f h, map f t),
   } in
   map;

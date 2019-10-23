@@ -97,6 +97,10 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                     println(x)
                     RTExpression.Pack(1, emptyList())
                 }
+                Name("#clear") -> {
+                    print("\u001b[H\u001b[2J")
+                    RTExpression.Pack(1, emptyList())
+                }
                 else -> ctx[expr.name] ?: throw EvalException("${expr.name} was undefined.")
             }
         }
@@ -259,6 +263,12 @@ private fun initialContext(): Context {
         hashMapOf()
     )
 
+    val primClear = RTExpression.Closure(
+        Name("x"),
+        RTExpression.Var(Name("#clear")),
+        hashMapOf()
+    )
+
     return hashMapOf(
         Name("add") to primAdd,
         Name("sub") to primSub,
@@ -267,7 +277,8 @@ private fun initialContext(): Context {
         Name("int_to_string") to primint_to_string,
         Name("fix") to z,
         Name("sleep") to primSleep,
-        Name("print") to primPrint
+        Name("print") to primPrint,
+        Name("clear") to primClear
     )
 }
 

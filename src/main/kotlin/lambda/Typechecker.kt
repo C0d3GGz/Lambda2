@@ -157,6 +157,13 @@ private val initialContext: TCContext
                     Type.String,
                     Type.Unit
                 )
+            ),
+            Name("clear") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.Unit,
+                    Type.Unit
+                )
             )
         )
     }

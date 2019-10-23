@@ -30,8 +30,8 @@ fun runFile(file: File) {
     }
 }
 
-fun main() {
-    runFile(File("examples.lam2"))
+fun main(args: Array<String>) {
+    runFile(File("examples.l2"))
     val watchService = FileSystems.getDefault().newWatchService()
     val path = Paths.get(".")
     path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY)

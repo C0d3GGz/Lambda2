@@ -273,12 +273,17 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     private fun parseLet(recursive: Boolean): Expression.Let {
         val (letSpan, _) = iterator.next()
         val binder = parseName()
+        var scheme:Scheme? = null
+        if(iterator.peek().value is Token.Colon){
+            iterator.next()
+            scheme = parseScheme()
+        }
         expectNext<Token.Equals>(expectedError("expected equals"))
         val expr = parseExpression()
         expectNext<Token.In>(expectedError("expected in"))
         val body = parseExpression()
 
-        return Expression.Let(recursive, binder, expr, body, Span(letSpan.start, body.span.end))
+        return Expression.Let(recursive, binder,scheme, expr, body, Span(letSpan.start, body.span.end))
     }
 
     private fun parseIf(): Expression.If { // if true then 3 else 4

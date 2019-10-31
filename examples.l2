@@ -14,6 +14,8 @@ type Option<a> {
 
 let identity: forall a. a -> a = \a. a;
 
+let const: forall a b. a -> b -> a = \a. \b. a;
+
 let or: Bool -> Bool -> Bool =
   \a. \b.
     if a then true else b;
@@ -71,9 +73,9 @@ let foldr : forall a b. (a -> b -> b) -> b -> List<a> -> b =
   foldr_go;
 
 let length : forall a. List<a> -> Int =
-  foldl (const (add 1)) 0;
+  foldl (\acc.\e.add 1 acc) 0;
 
-let reverse : Int =
+let reverse : forall a. List<a> -> List<a> =
   foldl (\xs. \x. List::Cons(x, xs)) List::Nil();
 
 let list_concat : forall a. List<a> -> List<a> -> List<a> =
@@ -174,11 +176,12 @@ let game_loop: List<List<Bool>> -> Int -> Unit =
   game_loop_go;
 
 let main: Unit =
-  let col = repeat 5 false in
-  let world = repeat 5 col in
-  let new_world =
+  let col: List<Bool> = repeat 5 false in
+  let world: List<List<Bool>> = repeat 5 col in
+  let new_world: List<List<Bool>> =
     set_cell 1 2 true
     (set_cell 2 2 true
     (set_cell 3 2 true world)) in
 
-  game_loop new_world 10;
+  game_loop new_world 1;
+

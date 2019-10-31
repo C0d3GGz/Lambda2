@@ -266,6 +266,10 @@ class Typechecker {
         substitution.subst.clear()
     }
 
+    fun subsumes(lhs: Scheme, rhs: Scheme) {
+        unify(instantiate(lhs), rhs.ty)
+    }
+
     fun infer(ctx: TCContext, expr: Expression): Expression.Typed {
         val span = expr.span
         val tyWrap: (Expression, Type) -> Expression.Typed = { e, ty -> Expression.Typed(e, ty, span) }
@@ -441,7 +445,12 @@ class Typechecker {
                 val t = zonk(infer(ctx, it.expr))
                 // println(this.substitution.toString())
                 val scheme = generalize(t.type, ctx)
-                ctx[it.name] = scheme
+
+                withSpannedError(it.span) {
+                    subsumes(scheme, it.scheme)
+                }
+
+                ctx[it.name] = it.scheme
             } catch (err: TypeError) {
                 errored = true
                 if (err !is TypeError.Followup) {

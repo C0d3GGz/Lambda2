@@ -14,6 +14,8 @@ type Option<a> {
 
 let identity: forall a. a -> a = \a. a;
 
+let const: forall a b. a -> b -> a = \a. \b. a;
+
 let or: Bool -> Bool -> Bool =
   \a. \b.
     if a then true else b;
@@ -174,11 +176,12 @@ let game_loop: List<List<Bool>> -> Int -> Unit =
   game_loop_go;
 
 let main: Unit =
-  let col = repeat 5 false in
-  let world = repeat 5 col in
-  let new_world =
+  let col: List<Bool> = repeat 5 false in
+  let world: List<List<Bool>> = repeat 5 col in
+  let new_world: List<List<Bool>> =
     set_cell 1 2 true
     (set_cell 2 2 true
     (set_cell 3 2 true world)) in
 
-  game_loop new_world 10;
+  game_loop new_world 1;
+

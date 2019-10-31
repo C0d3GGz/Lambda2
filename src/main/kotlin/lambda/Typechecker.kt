@@ -3,6 +3,7 @@ package lambda
 import io.vavr.kotlin.hashSet
 import lambda.syntax.*
 
+
 fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
 
 typealias TCContext = HashMap<Name, Scheme>
@@ -41,6 +42,7 @@ data class Substitution(val subst: HashMap<Int, Type>) {
             is Expression.Let -> Expression.Let(
                 expr.recursive,
                 expr.binder,
+                expr.scheme?.let { apply(it) },
                 apply(expr.expr),
                 apply(expr.body),
                 expr.sp
@@ -335,14 +337,18 @@ class Typechecker {
                     infer(ctx, expr.expr)
                 }
 
-                val genBinder = generalize(tyBinder.type, ctx)
-
                 val tmpCtx = HashMap(ctx)
-                tmpCtx[expr.binder] = genBinder
+
+                if (expr.scheme != null) {
+                    subsumes(generalize(tyBinder.type, ctx), expr.scheme)
+                    tmpCtx[expr.binder] = expr.scheme
+                } else {
+                    tmpCtx[expr.binder] = Scheme.fromType(tyBinder.type)
+                }
 
                 val tyBody = infer(tmpCtx, expr.body)
 
-                tyWrap(Expression.Let(expr.recursive, expr.binder, tyBinder, tyBody, span), tyBody.type)
+                tyWrap(Expression.Let(expr.recursive, expr.binder, expr.scheme, tyBinder, tyBody, span), tyBody.type)
             }
             is Expression.If -> {
                 val tyCond = infer(ctx, expr.condition)

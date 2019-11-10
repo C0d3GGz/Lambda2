@@ -135,10 +135,6 @@ private val initialContext: TCContext
                     Type.String
                 )
             ),
-            Name("identity") to Scheme(
-                listOf(TyVar(Name("a"))),
-                Type.Fun(Type.v("a"), Type.v("a"))
-            ), // forall a. a -> a
             Name("fix") to Scheme(
                 listOf(TyVar(Name("a"))),
                 Type.Fun(

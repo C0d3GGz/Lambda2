@@ -3,13 +3,27 @@ package lambda
 import lambda.syntax.Lit
 import lambda.syntax.Name
 
-typealias Context = HashMap<Name, RTExpression>
+data class Context(val binders: HashMap<Name, RTExpression>, val parent: Context?) {
+    operator fun get(name: Name): RTExpression? =
+        binders[name] ?: parent?.get(name)
+
+    fun extend(binders: HashMap<Name, RTExpression>): Context = Context(binders, this)
+    fun extendSingle(name: Name, expr: RTExpression): Context = extend(hashMapOf(name to expr))
+    fun flatten(): HashMap<Name, RTExpression> =
+        (parent?.flatten() ?: hashMapOf()).apply { putAll(binders) }
+
+    fun toList(): List<Pair<Name, RTExpression>> = flatten().toList()
+
+    companion object {
+        fun empty() = Context(HashMap(), null)
+    }
+}
 
 sealed class RTExpression {
     data class Literal(val lit: Lit) : RTExpression()
     data class Var(val name: Name) : RTExpression()
     data class Lambda(val binder: Name, val body: RTExpression) : RTExpression()
-    data class Closure(val binder: Name, val body: RTExpression, val context: Context) : RTExpression()
+    data class Closure(val binder: Name, val body: RTExpression, var context: Context) : RTExpression()
     data class App(val func: RTExpression, val arg: RTExpression) : RTExpression()
     data class If(val condition: RTExpression, val thenBranch: RTExpression, val elseBranch: RTExpression) :
         RTExpression()
@@ -110,8 +124,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
             when (val evaledClosure = eval(ctx, expr.func)) {
                 is RTExpression.Closure -> {
                     val evaledArg = eval(ctx, expr.arg)
-                    val tmpCtx = HashMap(evaledClosure.context)
-                    tmpCtx[evaledClosure.binder] = evaledArg
+                    val tmpCtx = evaledClosure.context.extendSingle(evaledClosure.binder, evaledArg)
                     eval(tmpCtx, evaledClosure.body)
                 }
                 else -> throw EvalException("$evaledClosure is not a function.")
@@ -135,11 +148,11 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 ?: throw EvalException("tried to pattern match on a non-pack value")
             val case = expr.cases.firstOrNull { it.tag == evaledExpr.tag }
                 ?: throw EvalException("failed to match pattern with tag ${evaledExpr.tag}")
-            val tmpCtx = HashMap(ctx)
-
+            val binders: HashMap<Name, RTExpression> = HashMap()
             case.binders.zip(evaledExpr.data).forEach { (n, e) ->
-                tmpCtx[n] = e
+                binders[n] = e
             }
+            val tmpCtx = ctx.extend(binders)
 
             eval(tmpCtx, case.body)
         }
@@ -147,12 +160,10 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
             val evaledExpr = eval(ctx, expr.expr)
 
             if (evaledExpr is RTExpression.Closure) {
-                evaledExpr.context[expr.binder] = evaledExpr
+                evaledExpr.context = evaledExpr.context.extendSingle(expr.binder, evaledExpr)
             }
 
-            val bodyCtx = HashMap(ctx)
-            bodyCtx[expr.binder] = evaledExpr
-
+            val bodyCtx = ctx.extendSingle(expr.binder, evaledExpr)
             eval(bodyCtx, expr.body)
         }
     }
@@ -164,7 +175,7 @@ fun evalExprs(exprs: List<Pair<Name, RTExpression>>): RTExpression {
 
     exprs.forEach {
         result = eval(ctx, it.second)
-        ctx[it.first] = result
+        ctx.binders[it.first] = result
     }
 
     return result
@@ -174,7 +185,6 @@ fun evalExpr(expr: RTExpression): RTExpression {
     return eval(initialContext(), expr)
 }
 
-
 private fun initialContext(): Context {
     val primAdd: RTExpression =
         RTExpression.Closure(
@@ -183,7 +193,7 @@ private fun initialContext(): Context {
                 Name("y"),
                 RTExpression.Var(Name("#add"))
             ),
-            hashMapOf()
+            Context.empty()
         )
 
     val primSub: RTExpression =
@@ -193,7 +203,7 @@ private fun initialContext(): Context {
                 Name("y"),
                 RTExpression.Var(Name("#sub"))
             ),
-            hashMapOf()
+            Context.empty()
         )
 
     val primEq: RTExpression =
@@ -203,7 +213,7 @@ private fun initialContext(): Context {
                 Name("y"),
                 RTExpression.Var(Name("#eq"))
             ),
-            hashMapOf()
+            Context.empty()
         )
     val primConcat: RTExpression =
         RTExpression.Closure(
@@ -212,14 +222,14 @@ private fun initialContext(): Context {
                 Name("y"),
                 RTExpression.Var(Name("#concat"))
             ),
-            hashMapOf()
+            Context.empty()
         )
 
     val primint_to_string: RTExpression =
         RTExpression.Closure(
             Name("x"),
             RTExpression.Var(Name("#int_to_string")),
-            hashMapOf()
+            Context.empty()
         )
 
     // Z = λf· (λx· f (λy· x x y)) (λx· f (λy· x x y))
@@ -248,37 +258,39 @@ private fun initialContext(): Context {
                 innerZ,
                 innerZ
             ),
-            hashMapOf()
+            Context.empty()
         )
 
     val primSleep = RTExpression.Closure(
         Name("x"),
         RTExpression.Var(Name("#sleep")),
-        hashMapOf()
+        Context.empty()
     )
 
     val primPrint = RTExpression.Closure(
         Name("x"),
         RTExpression.Var(Name("#print")),
-        hashMapOf()
+        Context.empty()
     )
 
     val primClear = RTExpression.Closure(
         Name("x"),
         RTExpression.Var(Name("#clear")),
-        hashMapOf()
+        Context.empty()
     )
 
-    return hashMapOf(
-        Name("add") to primAdd,
-        Name("sub") to primSub,
-        Name("eq") to primEq,
-        Name("concat") to primConcat,
-        Name("int_to_string") to primint_to_string,
-        Name("fix") to z,
-        Name("sleep") to primSleep,
-        Name("print") to primPrint,
-        Name("clear") to primClear
+    return Context(
+        hashMapOf(
+            Name("add") to primAdd,
+            Name("sub") to primSub,
+            Name("eq") to primEq,
+            Name("concat") to primConcat,
+            Name("int_to_string") to primint_to_string,
+            Name("fix") to z,
+            Name("sleep") to primSleep,
+            Name("print") to primPrint,
+            Name("clear") to primClear
+        ), null
     )
 }
 

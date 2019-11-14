@@ -29,3 +29,15 @@ compileKotlin {
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
+
+task fatJar(type: Jar) {
+    manifest {
+        attributes('Main-Class': 'lambda.ReplKt')
+    }
+    from {
+        configurations.compile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    with jar
+}

@@ -1,10 +1,7 @@
 package lambda
 
 import java.io.File
-import java.nio.file.FileSystems
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.nio.file.StandardWatchEventKinds
+import java.nio.file.*
 
 fun runFile(file: File) {
     try {
@@ -31,18 +28,19 @@ fun runFile(file: File) {
 }
 
 fun main(args: Array<String>) {
-    val filePath = args.getOrElse(0) {"examples.l2"}
-    runFile(File(filePath))
+    val filePath = File(args.getOrElse(0) { "examples.l2" })
+    runFile(filePath)
     val watchService = FileSystems.getDefault().newWatchService()
     val path = Paths.get(".")
     path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY)
     while (true) {
         val key = watchService.take() ?: break
-        for (event in key.pollEvents()) {
-            val changed = event.context() as Path
-            if (changed.endsWith("examples.lam2")) {
-                runFile(changed.toFile())
-            }
+        val shouldRebuild = key.pollEvents().any {
+            val p = it.context() as Path
+            p.toString().endsWith(".l2")
+        }
+        if (shouldRebuild) {
+            runFile(filePath)
         }
         key.reset()
     }

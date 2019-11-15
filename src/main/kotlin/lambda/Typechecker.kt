@@ -2,6 +2,7 @@ package lambda
 
 import io.vavr.kotlin.hashSet
 import lambda.syntax.*
+import java.io.File
 
 
 fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
@@ -336,7 +337,9 @@ class Typechecker {
                 val tmpCtx = HashMap(ctx)
 
                 if (expr.scheme != null) {
-                    subsumes(generalize(tyBinder.type, ctx), expr.scheme)
+                    withSpannedError(Span(expr.binder.span.start, expr.expr.span.end)) {
+                        subsumes(generalize(tyBinder.type, ctx), expr.scheme)
+                    }
                     tmpCtx[expr.binder] = expr.scheme
                 } else {
                     tmpCtx[expr.binder] = Scheme.fromType(tyBinder.type)
@@ -426,14 +429,14 @@ class Typechecker {
             reset()
             zonk(infer(initialContext, expr))
         } catch (err: TypeError) {
-            println("error: ${err.pretty()} ${if (err.span == Span.DUMMY) "" else err.span.toString()}")
+            println("${err.pretty()} ${if (err.span == Span.DUMMY) "" else err.span?.start.toString()}")
             throw RuntimeException("type errors occurred")
         }
         println("inferred AST: ${t.pretty()}")
         return generalize(t.type, initialContext)
     }
 
-    fun inferSourceFile(file: SourceFile): HashMap<Name, Scheme> {
+    fun inferSourceFile(file: SourceFile, filePath: File): HashMap<Name, Scheme> {
         val ctx = initialContext
         var errored = false
 
@@ -456,7 +459,7 @@ class Typechecker {
             } catch (err: TypeError) {
                 errored = true
                 if (err !is TypeError.Followup) {
-                    println("error ${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}")
+                    println("ERROR: $filePath${if (err.span == Span.DUMMY) "" else ":" + err.span?.start.toString()} ${err.pretty()}")
                 }
                 ctx[it.name] = Scheme.fromType(Type.ErrorSentinel)
             }

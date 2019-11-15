@@ -79,14 +79,17 @@ let reverse : forall a. List<a> -> List<a> =
 let list_concat : forall a. List<a> -> List<a> -> List<a> =
   \xs. \ys. foldr (\x. \acc. List::Cons(x, acc)) ys xs;
 
+let join_string : String -> List<String> -> String =
+  \sep. \xs.
+    match xs {
+      List::Nil() => "",
+      List::Cons(h, t) =>
+        foldl (\acc. \s. concat (concat acc sep) s) h t
+    };
+
 let list_to_string : forall a. (a -> String) -> List<a> -> String =
   \format. \xs.
-    match xs {
-      List::Nil() => "[]",
-      List::Cons(h, t) =>
-        let els = foldl (\acc. \el. concat (concat acc ", ") (format el)) (format h) t in
-        concat "[ " (concat els " ]")
-    };
+    concat (concat "[" (join_string ", " (map format xs))) "]";
 
 let repeat: forall a. Int -> a -> List<a> =
   \n. \a.
@@ -105,7 +108,7 @@ let cell_to_string: Bool -> String = \x. if x then "X" else "O";
 
 let print_column: List<Bool> -> Unit =
   \col.
-    void (print (list_to_string cell_to_string col));
+    void (print (join_string " " (map cell_to_string col)));
 
 let print_world: List<List<Bool>> -> Unit =
   \world.
@@ -169,17 +172,17 @@ let game_loop: List<List<Bool>> -> Int -> Unit =
       else
         let _ = clear Unit::T() in
         let _ = print_world world in
-        let _ = sleep 1000 in
+        let _ = sleep 100 in
         game_loop_go (evolve world) (sub n 1) in
   game_loop_go;
 
-let main: Unit =
-  let col: List<Bool> = repeat 5 false in
-  let world: List<List<Bool>> = repeat 5 col in
+let main: String =
+  let col: List<Bool> = repeat 10 false in
+  let world: List<List<Bool>> = repeat 10 col in
   let new_world: List<List<Bool>> =
-    set_cell 1 2 true
-    (set_cell 2 2 true
-    (set_cell 3 2 true world)) in
+    set_cell  4 4 true
+    (set_cell 5 4 true
+    (set_cell 6 4 true world)) in
 
-  game_loop new_world 1;
-
+  let _ = game_loop new_world 5 in
+  "DONE";

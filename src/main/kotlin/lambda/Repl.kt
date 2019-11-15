@@ -9,18 +9,14 @@ fun runFile(file: File) {
 
         try {
             println("Typechecking: sf") // TODO pretty for SourceFile
-            Typechecker().inferSourceFile(sf).forEach { println("${it.key.value} : ${it.value.pretty()}") }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+            Typechecker().inferSourceFile(sf, file).forEach { println("${it.key.value} : ${it.value.pretty()}") }
 
-        try {
             val loweredExprs = Lowering().lowerSourceFile(sf)
             // loweredExprs.forEach { println("Evaluating ${it.first.value} = ${it.second.pretty()}") }
             val result = evalExprs(loweredExprs)
             println(result.pretty())
         } catch (e: Exception) {
-            e.printStackTrace()
+            // e.printStackTrace()
         }
     } catch (e: Exception) {
         e.printStackTrace()

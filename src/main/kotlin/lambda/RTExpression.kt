@@ -56,6 +56,14 @@ fun matchStringLiteral(expr: RTExpression): String {
     }
 }
 
+fun matchBoolLiteral(expr: RTExpression): Boolean {
+    if (expr is RTExpression.Literal && expr.lit is Lit.Bool) {
+        return expr.lit.bool
+    } else {
+        throw EvalException("$expr is not a String")
+    }
+}
+
 fun eval(ctx: Context, expr: RTExpression): RTExpression {
     // println("Evaling: ${ctx.pretty()} ${expr.pretty()}")
     return when (expr) {
@@ -83,6 +91,14 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                         Lit.Bool(
                             matchIntLiteral(ctx[Name("x")]!!)
                                     == matchIntLiteral(ctx[Name("y")]!!)
+                        )
+                    )
+                }
+                Name("#eq_string") -> {
+                    RTExpression.Literal(
+                        Lit.Bool(
+                            matchStringLiteral(ctx[Name("x")]!!)
+                                    == matchStringLiteral(ctx[Name("y")]!!)
                         )
                     )
                 }
@@ -114,6 +130,15 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 Name("#clear") -> {
                     print("\u001b[H\u001b[2J")
                     RTExpression.Pack(1, emptyList())
+                }
+                Name("#assert") -> {
+                    val msg = matchStringLiteral(ctx[Name("msg")]!!)
+                    val cond = matchBoolLiteral(ctx[Name("cond")]!!)
+                    if(cond) {
+                        RTExpression.Pack(1, emptyList())
+                    } else {
+                        throw EvalException("Assert failed with message: $msg")
+                    }
                 }
                 else -> ctx[expr.name] ?: throw EvalException("${expr.name} was undefined.")
             }
@@ -215,6 +240,15 @@ private fun initialContext(): Context {
             ),
             Context.empty()
         )
+    val primEqString: RTExpression =
+        RTExpression.Closure(
+            Name("x"),
+            RTExpression.Lambda(
+                Name("y"),
+                RTExpression.Var(Name("#eq_string"))
+            ),
+            Context.empty()
+        )
     val primConcat: RTExpression =
         RTExpression.Closure(
             Name("x"),
@@ -279,17 +313,29 @@ private fun initialContext(): Context {
         Context.empty()
     )
 
+    val primAssert: RTExpression =
+        RTExpression.Closure(
+            Name("msg"),
+            RTExpression.Lambda(
+                Name("cond"),
+                RTExpression.Var(Name("#assert"))
+            ),
+            Context.empty()
+        )
+
     return Context(
         hashMapOf(
             Name("add") to primAdd,
             Name("sub") to primSub,
             Name("eq") to primEq,
+            Name("eq_string") to primEqString,
             Name("concat") to primConcat,
             Name("int_to_string") to primint_to_string,
             Name("fix") to z,
             Name("sleep") to primSleep,
             Name("print") to primPrint,
-            Name("clear") to primClear
+            Name("clear") to primClear,
+            Name("assert") to primAssert
         ), null
     )
 }

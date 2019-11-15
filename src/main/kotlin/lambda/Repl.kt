@@ -15,6 +15,8 @@ fun runFile(file: File) {
             // loweredExprs.forEach { println("Evaluating ${it.first.value} = ${it.second.pretty()}") }
             val result = evalExprs(loweredExprs)
             println(result.pretty())
+        } catch (e: EvalException) {
+            println(e.message)
         } catch (e: Exception) {
             // e.printStackTrace()
         }

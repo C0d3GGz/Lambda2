@@ -122,6 +122,13 @@ private val initialContext: TCContext
                     Type.Fun(Type.Int, Type.Bool)
                 )
             ),
+            Name("eq_string") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.String,
+                    Type.Fun(Type.String, Type.Bool)
+                )
+            ),
             Name("concat") to Scheme(
                 emptyList(),
                 Type.Fun(
@@ -162,6 +169,13 @@ private val initialContext: TCContext
                 Type.Fun(
                     Type.Unit,
                     Type.Unit
+                )
+            ),
+            Name("assert") to Scheme(
+                emptyList(),
+                Type.Fun(
+                    Type.String,
+                    Type.Fun(Type.Bool, Type.Unit)
                 )
             )
         )

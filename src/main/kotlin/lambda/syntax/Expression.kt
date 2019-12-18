@@ -4,6 +4,7 @@ import lambda.Scheme
 import lambda.Span
 import lambda.Spanned
 import lambda.Type
+import kotlin.math.exp
 
 sealed class Lit {
     val span: Span
@@ -21,13 +22,30 @@ sealed class Lit {
 sealed class Expression {
     data class Literal(val lit: Lit) : Expression()
     data class Var(val name: Name) : Expression()
-    data class Lambda(val binder: Name, val body: Expression, val sp: Span) : Expression()
+    data class Lambda(val binder: Name, val body: Expression, val sp: Span) : Expression() {
+        fun foldArguments(): Pair<List<Name>, Expression> =
+            when (body) {
+                is Lambda -> {
+                    val (args, newBody) = body.foldArguments()
+                    (listOf(binder) + args) to newBody
+                }
+                else -> listOf(binder) to body
+            }
+    }
+
     data class App(val func: Expression, val arg: Expression, val sp: Span) : Expression()
     data class Typed(val expr: Expression, val type: Type, val sp: Span) : Expression() {
         override fun withSpan(span: Span) = Spanned(span, this)
     }
 
-    data class Let(val recursive: Boolean, val binder: Name, val scheme: Scheme?, val expr: Expression, val body: Expression, val sp: Span) :
+    data class Let(
+        val recursive: Boolean,
+        val binder: Name,
+        val scheme: Scheme?,
+        val expr: Expression,
+        val body: Expression,
+        val sp: Span
+    ) :
         Expression()
 
     data class If(
@@ -48,7 +66,11 @@ sealed class Expression {
         val binders: List<Name>,
         val body: Expression,
         val span: Span
-    )
+    ) {
+        fun freeVars(): HashSet<Name> = body.freeVars().also {
+            it.removeAll(binders)
+        }
+    }
 
     val span: Span
         get() = when (this) {
@@ -64,5 +86,42 @@ sealed class Expression {
         }
 
     open fun withSpan(span: Span) = Spanned(span, this)
+
+    fun freeVars(): HashSet<Name> {
+        return when (this) {
+            is Literal -> hashSetOf()
+            is Var -> hashSetOf(name)
+            is Lambda -> body.freeVars().also { it.remove(binder) }
+            is App -> func.freeVars().also { it.addAll(arg.freeVars()) }
+            is Typed -> expr.freeVars()
+            is Let -> {
+                if (recursive) {
+                    expr.freeVars().also {
+                        it.addAll(body.freeVars())
+                        it.remove(binder)
+                    }
+                } else {
+                    body.freeVars().also {
+                        it.remove(binder)
+                        it.addAll(expr.freeVars())
+                    }
+                }
+            }
+            is If -> condition.freeVars().also {
+                it.addAll(thenBranch.freeVars())
+                it.addAll(elseBranch.freeVars())
+            }
+            is Construction -> {
+                val res = hashSetOf<Name>()
+                exprs.forEach { res.addAll(it.freeVars()) }
+                res
+            }
+            is Match -> expr.freeVars().also { res ->
+                cases.forEach {
+                    res.addAll(it.freeVars())
+                }
+            }
+        }
+    }
 
 }

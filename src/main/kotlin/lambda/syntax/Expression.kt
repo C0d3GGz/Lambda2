@@ -70,6 +70,12 @@ sealed class Expression {
         fun freeVars(): HashSet<Name> = body.freeVars().also {
             it.removeAll(binders)
         }
+
+        fun subst(name: Name, replacement: Expression): Case {
+            return if (binders.contains(name)) this else {
+                copy(body = body.subst(name, replacement))
+            }
+        }
     }
 
     val span: Span
@@ -121,6 +127,35 @@ sealed class Expression {
                     res.addAll(it.freeVars())
                 }
             }
+        }
+    }
+
+    fun subst(name: Name, replacement: Expression): Expression {
+        // TODO: handle name capture
+        return when (this) {
+            is Literal -> this
+            is Var -> if (name == name) replacement else this
+            is Lambda -> {
+                if (binder == name) this else copy(body = body.subst(name, replacement))
+            }
+            is App -> copy(arg = arg.subst(name, replacement), func = func.subst(name, replacement))
+            is Typed -> copy(expr = expr.subst(name, replacement))
+            is Let -> copy(
+                expr = if (recursive && binder == name) expr else expr.subst(
+                    name,
+                    replacement
+                ),
+                body = if (binder == name) body else body.subst(name, replacement)
+            )
+            is If -> copy(
+                condition = condition.subst(name, replacement),
+                thenBranch = thenBranch.subst(name, replacement),
+                elseBranch = elseBranch.subst(name, replacement)
+            )
+            is Construction -> copy(exprs = exprs.map { it.subst(name, replacement) })
+            is Match -> copy(
+                expr = expr.subst(name, replacement),
+                cases = cases.map { it.subst(name, replacement) })
         }
     }
 

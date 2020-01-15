@@ -1,12 +1,10 @@
 package lambda.backend
 
-import lambda.Lexer
-import lambda.Parser
-import lambda.Span
-import lambda.Type
+import lambda.*
 import lambda.syntax.DataConstructor
 import lambda.syntax.Expression
 import lambda.syntax.Name
+import lambda.syntax.SourceFile
 import java.util.*
 import lambda.backend.Expression as IRExpression
 
@@ -35,6 +33,21 @@ fun main() {
 }
 
 class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
+
+    companion object {
+        fun lowerProg(sourceFile: SourceFile): List<Declaration> {
+            val table = sourceFile.typeDeclarations()
+                .map { type -> type.name to type.dataConstructors }
+                .toMap()
+
+            val lowering = Lowering(table)
+            val firstDecl = sourceFile.valueDeclarations()[0]
+            val loweredExpr = lowering.lowerExpr(firstDecl.expr, emptyMap())
+            val decl = Declaration(firstDecl.name, listOf(), loweredExpr)
+
+            return lowering.liftedDeclarations + decl
+        }
+    }
     var freshSupply: Int = 0
     val liftedDeclarations: MutableList<Declaration> = mutableListOf()
 
@@ -136,4 +149,3 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
         return IRExpression.Case(tagForDtor(case.type, case.dtor), case.binders, lowerExpr(case.body, tempEnv))
     }
 }
-

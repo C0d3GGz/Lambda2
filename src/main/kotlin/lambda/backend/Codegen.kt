@@ -7,12 +7,23 @@ import asmble.ast.Node.Type.*
 import asmble.io.AstToBinary
 import asmble.io.AstToSExpr
 import asmble.io.ByteWriter
+import lambda.Lexer
+import lambda.Parser
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.Exception
 
 fun main() {
-    val module = Codegen().compileModule()
+
+    val source = """
+       let main : Int = 42;
+    """
+
+    val sf = Parser(Lexer(source)).parseSourceFile()
+    val ir = Lowering.lowerProg(sf)
+
+
+    val module = Codegen().compileProgram(ir)
     val expr = AstToSExpr().fromModule(module)
     println(expr)
 
@@ -90,7 +101,17 @@ class Codegen() {
         return registerGlobalFunc(name, func, isTable)
     }
 
-    fun compileModule(): Module {
+    fun makeFuncN(
+        name: String,
+        args: List<Value>,
+        res: Value?,
+        isTable: Boolean = false,
+        body: (Locals, List<Int>) -> List<Instr>
+    ): Int {
+        TODO()
+    }
+
+    fun compileProgram(decls: List<Declaration>): Module {
         val watermark = registerGlobals(
             "watermark",
             Global(
@@ -260,60 +281,34 @@ class Codegen() {
             )
         }
 
-        val add3 = makeFunc1("add3", Value.I32, Value.I32) { locals, x ->
-            val y = locals.register(Value.I32)
-            listOf(
-                Instr.I32Const(3),
-                Instr.SetLocal(y),
-                Instr.GetLocal(x),
-                Instr.GetLocal(y),
-                Instr.Call(add)
-            )
+
+        fun compileLiteral(lit: Lit): List<Instr> {
+            return when (lit) {
+                is Lit.Int -> listOf(Instr.I32Const(lit.int))
+                is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 1 else 0))
+                is Lit.String -> TODO("string literals unsupported")
+            }
         }
 
-        val duble = makeFunc2("duble\$inner", Value.I32, Value.I32, Value.I32, false) { _, x, y ->
-            listOf(
-                Instr.GetLocal(x),
-                Instr.GetLocal(y),
-                Instr.I32Add,
-                Instr.I32Const(2),
-                Instr.I32Mul
-            )
+        fun compileExpr(expr: Expression): List<Instr> {
+            return when (expr) {
+                is Expression.Literal -> compileLiteral(expr.lit)
+                is Expression.Var -> TODO()
+                is Expression.App -> TODO()
+                is Expression.Let -> TODO()
+                is Expression.If -> TODO()
+                is Expression.Pack -> TODO()
+                is Expression.Match -> TODO()
+            }
         }
 
-        val dubleWrapper = makeFunc1("duble", Value.I32, Value.I32, true) { _, arg_location ->
-            listOf(
-                Instr.GetLocal(arg_location),
-                Instr.I32Load(2, 0),
-
-                Instr.GetLocal(arg_location),
-                Instr.I32Const(4),
-                Instr.I32Add,
-                Instr.I32Load(2, 0),
-
-                Instr.Call(duble)
-            )
+        fun compileDeclaration(decl: Declaration) {
+            val arity = decl.args.size
+            println("compiling decl: ${decl.name.value} @ $arity")
+            TODO()
         }
 
-        val fn0 = Func(
-            type = Type.Func(params = emptyList(), ret = Value.I32),
-            locals = emptyList(),
-            instructions = listOf(
-
-                Instr.I32Const(globalFuncs.find { it.first == "duble\$inner" }!!.second.type.params.size), //arity
-                Instr.I32Const(tableFuncs.indexOf("duble")), //code pointer
-                Instr.Call(makeClosure),
-
-                Instr.I32Const(21),
-                Instr.Call(applyClosure),
-
-                Instr.I32Const(22),
-                Instr.Call(applyClosure)
-
-            )
-        )
-
-        val main = registerGlobalFunc("main", fn0, false)
+        decls.forEach { compileDeclaration(it) }
 
         return Module(
             funcs = globalFuncs.map { it.second },

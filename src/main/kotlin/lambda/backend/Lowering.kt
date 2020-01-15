@@ -10,12 +10,10 @@ import lambda.syntax.Name
 import java.util.*
 import lambda.backend.Expression as IRExpression
 
-
 fun main() {
     val input = """
-        let y = 1 in
-        let z = 2 in 
-        (\x. add z y) 4
+        let y = 3 in
+        letrec f = \x. f y x in f 3
     """.trimIndent()
 
     val expr = Parser(Lexer(input)).parseExpression()
@@ -40,6 +38,33 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
     var freshSupply: Int = 0
     val liftedDeclarations: MutableList<Declaration> = mutableListOf()
 
+    private fun freshName(name: Name) = Name("\$$name${freshSupply++}")
+
+    private fun tagForDtor(type: Name, dtor: Name): Int = typeTable.getValue(type).indexOfFirst { it.name == dtor } + 1
+
+    private fun liftFunction(
+        topName: Name,
+        capturedVars: List<Pair<Name, LnName.Index>>,
+        expr: Expression.Lambda
+    ): IRExpression {
+        var (args, body) = expr.foldArguments()
+        val newEnv = HashMap<Name, LnName.Index>()
+        args = capturedVars.map { it.first } + args
+        args.forEachIndexed { index, name ->
+            newEnv[name] = LnName.Index(0, index)
+        }
+        val loweredBody = lowerExpr(body, newEnv)
+        liftedDeclarations += Declaration(topName, args, loweredBody)
+
+        return capturedVars.map { it.second }
+            .fold<LnName.Index, IRExpression>(IRExpression.Var(LnName.Free(topName))) { acc, ix ->
+                IRExpression.App(
+                    acc,
+                    IRExpression.Var(LnName.Bound(ix))
+                )
+            }
+    }
+
     fun lowerExpr(expr: Expression, env: Map<Name, LnName.Index>): IRExpression {
         return when (expr) {
             is Expression.Literal -> IRExpression.Literal(Lit.fromSyntax(expr.lit))
@@ -48,26 +73,12 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
             } ?: LnName.Free(expr.name))
 
             is Expression.Lambda -> {
-                var (args, body) = expr.foldArguments()
                 val topName = freshName(Name("lifted"))
                 val capturedVars = expr.freeVars().mapNotNull { name ->
                     env[name]?.let { name to it }
                 }
-                val newEnv = HashMap<Name, LnName.Index>()
-                args = capturedVars.map { it.first } + args
-                args.forEachIndexed { index, name ->
-                    newEnv[name] = LnName.Index(0, index)
-                }
-                val loweredBody = lowerExpr(body, newEnv)
-                liftedDeclarations += Declaration(topName, args, loweredBody)
 
-                capturedVars.map { it.second }
-                    .fold<LnName.Index, IRExpression>(IRExpression.Var(LnName.Free(topName))) { acc, ix ->
-                        IRExpression.App(
-                            acc,
-                            IRExpression.Var(LnName.Bound(ix))
-                        )
-                    }
+                liftFunction(topName, capturedVars, expr)
             }
             is Expression.App -> IRExpression.App(lowerExpr(expr.func, env), lowerExpr(expr.arg, env))
             is Expression.Typed -> lowerExpr(expr.expr, env)
@@ -75,8 +86,29 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
                 if (expr.expr !is Expression.Lambda)
                     throw Exception("only functions may be defined recursively")
 
+                val topName = freshName(Name(expr.binder.value))
+                val capturedVars = expr.freeVars().mapNotNull { name ->
+                    if (expr.binder == name) null else
+                        env[name]?.let { name to it }
+                }
 
-                TODO()
+                val topLevelFn: Expression = Expression.Var(topName)
+
+                val replacement = capturedVars.fold(topLevelFn) { acc, (name, _) ->
+                    Expression.App(
+                        acc,
+                        Expression.Var(name),
+                        Span.DUMMY
+                    )
+                }
+
+                val loweredExpr = liftFunction(topName, capturedVars, expr.expr.substLam(expr.binder, replacement))
+
+                val tempEnv = HashMap<Name, LnName.Index>()
+                env.mapValuesTo(tempEnv) { it.value.shift() }
+                tempEnv[expr.binder] = LnName.Index(0, 0)
+                IRExpression.Let(expr.binder, loweredExpr, lowerExpr(expr.body, tempEnv))
+
             } else {
                 val tempEnv = HashMap<Name, LnName.Index>()
                 env.mapValuesTo(tempEnv) { it.value.shift() }
@@ -103,9 +135,5 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
         case.binders.forEachIndexed { index, name -> tempEnv[name] = LnName.Index(0, index) }
         return IRExpression.Case(tagForDtor(case.type, case.dtor), case.binders, lowerExpr(case.body, tempEnv))
     }
-
-    private fun tagForDtor(type: Name, dtor: Name): Int = typeTable.getValue(type).indexOfFirst { it.name == dtor } + 1
-
-    fun freshName(name: Name) = Name("\$$name${freshSupply++}")
 }
 

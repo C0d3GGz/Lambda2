@@ -1,9 +1,6 @@
 package lambda.syntax
 
-import lambda.Scheme
-import lambda.Span
-import lambda.Spanned
-import lambda.Type
+import lambda.*
 import kotlin.math.exp
 
 sealed class Lit {
@@ -31,6 +28,10 @@ sealed class Expression {
                 }
                 else -> listOf(binder) to body
             }
+
+        fun substLam(name: Name, replacement: Expression): Lambda =
+            if (binder == name) this else copy(body = body.subst(name, replacement))
+
     }
 
     data class App(val func: Expression, val arg: Expression, val sp: Span) : Expression()
@@ -134,10 +135,8 @@ sealed class Expression {
         // TODO: handle name capture
         return when (this) {
             is Literal -> this
-            is Var -> if (name == name) replacement else this
-            is Lambda -> {
-                if (binder == name) this else copy(body = body.subst(name, replacement))
-            }
+            is Var -> if (this.name == name) replacement else this
+            is Lambda -> substLam(name, replacement)
             is App -> copy(arg = arg.subst(name, replacement), func = func.subst(name, replacement))
             is Typed -> copy(expr = expr.subst(name, replacement))
             is Let -> copy(

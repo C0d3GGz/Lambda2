@@ -16,7 +16,9 @@ import kotlin.Exception
 fun main() {
 
     val source = """
-       let main : Int = 42;
+       let main : Int = 
+         let x = 42 in
+         if true then x else 44;
     """
 
     val sf = Parser(Lexer(source)).parseSourceFile()
@@ -108,7 +110,15 @@ class Codegen() {
         isTable: Boolean = false,
         body: (Locals, List<Int>) -> List<Instr>
     ): Int {
-        TODO()
+
+        val locals = Locals(*args.toTypedArray())
+        val instrs = body(locals, args.indices.toList())
+        val func = Func(
+            type = Type.Func(args, ret = res),
+            locals = locals.getLocals(),
+            instructions = instrs
+        )
+        return registerGlobalFunc(name, func, isTable)
     }
 
     fun compileProgram(decls: List<Declaration>): Module {
@@ -285,27 +295,43 @@ class Codegen() {
         fun compileLiteral(lit: Lit): List<Instr> {
             return when (lit) {
                 is Lit.Int -> listOf(Instr.I32Const(lit.int))
-                is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 1 else 0))
+                is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 0 else 1))
                 is Lit.String -> TODO("string literals unsupported")
             }
         }
 
-        fun compileExpr(expr: Expression): List<Instr> {
+        fun compileExpr(locals: Locals, expr: Expression): List<Instr> {
             return when (expr) {
                 is Expression.Literal -> compileLiteral(expr.lit)
                 is Expression.Var -> TODO()
                 is Expression.App -> TODO()
-                is Expression.Let -> TODO()
-                is Expression.If -> TODO()
+                is Expression.Let -> {
+                    val binder = locals.register(Value.I32)
+                    compileExpr(locals, expr.expr) +
+                            Instr.SetLocal(binder) +
+                            compileExpr(locals, expr.body.instantiate(listOf(Expression.GetLocal(binder))))
+                }
+                is Expression.If -> {
+                    compileExpr(locals, expr.condition) +
+                            Instr.If(Value.I32) +
+                            compileExpr(locals, expr.thenBranch) +
+                            Instr.Else +
+                            compileExpr(locals, expr.elseBranch) +
+                            Instr.End
+                }
                 is Expression.Pack -> TODO()
                 is Expression.Match -> TODO()
+                is Expression.GetLocal -> listOf(Instr.GetLocal(expr.index))
             }
         }
 
         fun compileDeclaration(decl: Declaration) {
             val arity = decl.args.size
             println("compiling decl: ${decl.name.value} @ $arity")
-            TODO()
+
+            makeFuncN(decl.name.value, decl.args.map { Value.I32 }, Value.I32, false) { locals, params ->
+                compileExpr(locals, decl.body)
+            }
         }
 
         decls.forEach { compileDeclaration(it) }

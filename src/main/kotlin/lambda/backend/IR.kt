@@ -35,6 +35,8 @@ sealed class Expression {
 
     data class Match(val expr: Expression, val cases: List<Case>) : Expression()
 
+    data class GetLocal(val index: Int): Expression()
+
     data class Case(
         val tag: Int,
         val binders: List<Name>,
@@ -45,13 +47,14 @@ sealed class Expression {
         }
     }
 
+
     fun instantiate(replacements: List<Expression>): Expression {
         return instantiateInner(0, replacements)
     }
 
     fun instantiateInner(depth: Int, replacements: List<Expression>): Expression {
         return when (this) {
-            is Literal -> this
+            is Literal, is GetLocal -> this
             is Var ->
                 when {
                     name is LnName.Bound && name.index.depth == depth -> {

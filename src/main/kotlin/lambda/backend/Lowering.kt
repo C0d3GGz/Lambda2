@@ -130,8 +130,8 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
             }
             is Expression.If -> IRExpression.If(
                 lowerExpr(expr.condition, env),
-                lowerExpr(expr.elseBranch, env),
-                lowerExpr(expr.thenBranch, env)
+                lowerExpr(expr.thenBranch, env),
+                lowerExpr(expr.elseBranch, env)
             )
             is Expression.Construction -> IRExpression.Pack(
                 tagForDtor(expr.type, expr.dtor),

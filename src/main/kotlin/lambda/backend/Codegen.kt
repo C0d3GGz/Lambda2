@@ -12,15 +12,13 @@ import lambda.Parser
 import lambda.syntax.Name
 import java.io.ByteArrayOutputStream
 import java.io.File
-import kotlin.Exception
 
 fun main() {
 
     val source = """
-       let main : Int = 
-         let const0 = \x. \y. x in
-         let const1 = \x. \y. x in
-         ((const0 const1 42) 45 10);
+       let main : Int =
+         letrec sum = \x. if int_eq x 0 then 0 else add x (sum (sub x 1)) in
+         sum 3;
     """
 
     val sf = Parser(Lexer(source)).parseSourceFile()
@@ -58,11 +56,20 @@ class Codegen() {
 
     private val types = mutableListOf<Pair<String, Type.Func>>()
 
-    private fun registerGlobalFunc(name: String, func: Func, isTable: Boolean): Int =
-        globalFuncs.size.also {
-            globalFuncs.add(name to func)
-            if (isTable) tableFuncs.add(name)
-        }
+    private fun registerGlobalFunc(name: String, func: Func, isTable: Boolean): Int {
+        val index = globalFuncs.indexOfFirst { it.first == name }
+
+        return if (index < 0)
+            globalFuncs.size.also {
+                globalFuncs.add(name to func)
+                if (isTable) tableFuncs.add(name)
+            }
+        else
+            index.also {
+                globalFuncs[it] = name to func
+                if (isTable && tableFuncs.indexOf(name) < 0) tableFuncs.add(name)
+            }
+    }
 
     private fun registerGlobals(name: String, global: Global): Int =
         globals.size.also { globals.add(name to global) }
@@ -70,6 +77,41 @@ class Codegen() {
     private fun registerType(name: String, type: Type.Func): Int =
         types.size.also { types.add(name to type) }
 
+
+    fun arityFor(name: Name): Int {
+        val (_, func) = globalFuncs.first { it.first == name.value }
+        return func.type.params.size
+    }
+
+    fun tableNameFor(name: Name): String = "${name.value}\$table"
+
+    fun tableIndexFor(name: Name): Int = tableFuncs.indexOfFirst { it == tableNameFor(name) }.also {
+        if (it < 0) throw Exception("unknown table function ${tableNameFor(name)}")
+    }
+
+    fun makePrimitiveBinary(name: String, instr: Instr): Int {
+        val binaryF = makeFunc2(
+            name,
+            Value.I32, Value.I32, Value.I32
+        ) { _, x, y ->
+            listOf(
+                Instr.GetLocal(x),
+                Instr.GetLocal(y),
+                instr
+            )
+        }
+
+        makeFunc1(tableNameFor(Name(name)), Value.I32, Value.I32, true) { _, argPointer ->
+            (0 until 2).flatMap { i ->
+                listOf<Instr>(
+                    Instr.GetLocal(argPointer),
+                    Instr.I32Load(2, i * 4L)
+                )
+            } + Instr.Call(binaryF)
+        }
+
+        return binaryF
+    }
 
     fun makeFunc1(
         name: String,
@@ -113,7 +155,6 @@ class Codegen() {
         isTable: Boolean = false,
         body: (Locals, List<Int>) -> List<Instr>
     ): Int {
-
         val locals = Locals(*args.toTypedArray())
         val instrs = body(locals, args.indices.toList())
         val func = Func(
@@ -283,35 +324,19 @@ class Codegen() {
             )
         }
 
-        val add = makeFunc2(
-            "add",
-            Value.I32, Value.I32, Value.I32
-        ) { _, x, y ->
-            listOf(
-                Instr.GetLocal(x),
-                Instr.GetLocal(y),
-                Instr.I32Add
-            )
-        }
-
+        makePrimitiveBinary("add", Instr.I32Add)
+        makePrimitiveBinary("sub", Instr.I32Sub)
+        makePrimitiveBinary("mul", Instr.I32Mul)
+        makePrimitiveBinary("int_eq", Instr.I32Eq)
+        makePrimitiveBinary("int_gt", Instr.I32GtS)
+        makePrimitiveBinary("int_gte", Instr.I32GeS)
 
         fun compileLiteral(lit: Lit): List<Instr> {
             return when (lit) {
                 is Lit.Int -> listOf(Instr.I32Const(lit.int))
-                is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 0 else 1))
+                is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 1 else 0))
                 is Lit.String -> TODO("string literals unsupported")
             }
-        }
-
-        fun arityFor(name: Name): Int {
-            val (_, func) = globalFuncs.first { it.first == name.value }
-            return func.type.params.size
-        }
-
-        fun tableNameFor(name: Name): String = "${name.value}\$table"
-
-        fun tableIndexFor(name: Name): Int {
-            return tableFuncs.indexOfFirst { it == tableNameFor(name) }
         }
 
         fun compileExpr(locals: Locals, expr: Expression): List<Instr> {
@@ -370,6 +395,18 @@ class Codegen() {
             }
         }
 
+        fun registerDeclaration(decl: Declaration) {
+            val dummyFunc = Func(
+                type = Type.Func(decl.args.map { Value.I32 }, ret = Value.I32),
+                locals = emptyList(),
+                instructions = listOf(Instr.Unreachable)
+            )
+
+            registerGlobalFunc(decl.name.value, dummyFunc, false)
+            registerGlobalFunc(tableNameFor(decl.name), dummyFunc, true)
+        }
+
+        decls.forEach { registerDeclaration(it) }
         decls.forEach { compileDeclaration(it) }
 
         return Module(

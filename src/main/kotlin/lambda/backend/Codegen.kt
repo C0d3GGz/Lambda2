@@ -16,9 +16,13 @@ import java.io.File
 fun main() {
 
     val source = """
+       type Option<a> {
+         None(),
+         Some(a)
+       }
+       
        let main : Int =
-         letrec sum = \x. if int_eq x 0 then 0 else add x (sum (sub x 1)) in
-         sum 3;
+         Option::Some(20);
     """
 
     val sf = Parser(Lexer(source)).parseSourceFile()
@@ -370,7 +374,25 @@ class Codegen() {
                             compileExpr(locals, expr.elseBranch) +
                             Instr.End
                 }
-                is Expression.Pack -> TODO()
+                is Expression.Pack -> {
+                    val arity = expr.exprs.size
+                    val packPointer = locals.register(Value.I32)
+
+                    listOf<Instr>(
+                        Instr.I32Const(4 + 4 * arity),
+                        Instr.Call(allocate),
+                        Instr.TeeLocal(packPointer),
+                        Instr.I32Const(expr.tag),
+                        Instr.I32Store16(1, 0),
+                        Instr.GetLocal(packPointer),
+                        Instr.I32Const(arity),
+                        Instr.I32Store16(1, 2)
+                    ) + expr.exprs.withIndex().flatMap { (i, e) ->
+                        listOf(Instr.GetLocal(packPointer)) +
+                                compileExpr(locals, e) +
+                                Instr.I32Store(2, 4L + 4 * i)
+                    } + Instr.GetLocal(packPointer)
+                }
                 is Expression.Match -> TODO()
                 is Expression.GetLocal -> listOf(Instr.GetLocal(expr.index))
             }

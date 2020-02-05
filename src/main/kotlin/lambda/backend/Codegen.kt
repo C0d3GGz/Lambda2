@@ -9,6 +9,7 @@ import asmble.io.AstToSExpr
 import asmble.io.ByteWriter
 import lambda.Lexer
 import lambda.Parser
+import lambda.syntax.Name
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.Exception
@@ -17,13 +18,15 @@ fun main() {
 
     val source = """
        let main : Int = 
-         let x = 42 in
-         if true then x else 44;
+         let const0 = \x. \y. x in
+         let const1 = \x. \y. x in
+         ((const0 const1 42) 45 10);
     """
 
     val sf = Parser(Lexer(source)).parseSourceFile()
     val ir = Lowering.lowerProg(sf)
 
+    ir.forEach { println(it) }
 
     val module = Codegen().compileProgram(ir)
     val expr = AstToSExpr().fromModule(module)
@@ -300,11 +303,34 @@ class Codegen() {
             }
         }
 
+        fun arityFor(name: Name): Int {
+            val (_, func) = globalFuncs.first { it.first == name.value }
+            return func.type.params.size
+        }
+
+        fun tableNameFor(name: Name): String = "${name.value}\$table"
+
+        fun tableIndexFor(name: Name): Int {
+            return tableFuncs.indexOfFirst { it == tableNameFor(name) }
+        }
+
         fun compileExpr(locals: Locals, expr: Expression): List<Instr> {
             return when (expr) {
                 is Expression.Literal -> compileLiteral(expr.lit)
-                is Expression.Var -> TODO()
-                is Expression.App -> TODO()
+                is Expression.Var -> {
+                    if (expr.name !is LnName.Free) throw Exception("can't deal with bound names in compileExpr")
+
+                    listOf(
+                        Instr.I32Const(arityFor(expr.name.name)),
+                        Instr.I32Const(tableIndexFor(expr.name.name)),
+                        Instr.Call(makeClosure)
+                    )
+                }
+                is Expression.App -> {
+                    compileExpr(locals, expr.func) +
+                            compileExpr(locals, expr.arg) +
+                            Instr.Call(applyClosure)
+                }
                 is Expression.Let -> {
                     val binder = locals.register(Value.I32)
                     compileExpr(locals, expr.expr) +
@@ -329,8 +355,18 @@ class Codegen() {
             val arity = decl.args.size
             println("compiling decl: ${decl.name.value} @ $arity")
 
-            makeFuncN(decl.name.value, decl.args.map { Value.I32 }, Value.I32, false) { locals, params ->
-                compileExpr(locals, decl.body)
+            val uncurried =
+                makeFuncN(decl.name.value, decl.args.map { Value.I32 }, Value.I32, false) { locals, params ->
+                    compileExpr(locals, decl.body.instantiate(params.map { Expression.GetLocal(it) }))
+                }
+
+            makeFunc1(tableNameFor(decl.name), Value.I32, Value.I32, true) { _, argPointer ->
+                (0 until arity).flatMap { i ->
+                    listOf<Instr>(
+                        Instr.GetLocal(argPointer),
+                        Instr.I32Load(2, i * 4L)
+                    )
+                } + Instr.Call(uncurried)
             }
         }
 

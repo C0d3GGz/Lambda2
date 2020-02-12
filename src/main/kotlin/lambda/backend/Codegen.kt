@@ -9,6 +9,7 @@ import asmble.io.AstToSExpr
 import asmble.io.ByteWriter
 import lambda.Lexer
 import lambda.Parser
+import lambda.Typechecker
 import lambda.syntax.Name
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -16,16 +17,30 @@ import java.io.File
 fun main() {
 
     val source = """
-       type Option<a> {
-         None(),
-         Some(a)
-       }
+        type Option<a> {
+            None(),
+            Some(a)
+        }
+        
+        type List<a> {
+            Nil(),
+            Cons(a, List<a>)
+        }
        
-       let main : Int =
-         Option::Some(20);
+        let main : Int =
+        
+            letrec sum = \x. match x {
+                List::Nil() => 0,
+                List::Cons(h,t) => add h (sum t) 
+            } in 
+        
+            let list = List::Cons(12, List::Cons(10, List::Cons(20, List::Nil() ))) in  
+            sum list;
+        
     """
 
     val sf = Parser(Lexer(source)).parseSourceFile()
+    Typechecker().inferSourceFile(sf)
     val ir = Lowering.lowerProg(sf)
 
     ir.forEach { println(it) }
@@ -85,6 +100,10 @@ class Codegen() {
     fun arityFor(name: Name): Int {
         val (_, func) = globalFuncs.first { it.first == name.value }
         return func.type.params.size
+    }
+
+    fun funcIndexFor(name: String): Int = globalFuncs.indexOfFirst { it.first == name }.also {
+        if (it < 0) throw Exception("unknown global function $name")
     }
 
     fun tableNameFor(name: Name): String = "${name.value}\$table"
@@ -167,6 +186,119 @@ class Codegen() {
             instructions = instrs
         )
         return registerGlobalFunc(name, func, isTable)
+    }
+
+    fun compileCase(
+        locals: Locals,
+        case: Expression.Case,
+        tag: Int,
+        scrutinee: Int,
+        continuation: List<Instr>
+    ): List<Instr> {
+        val binders = case.binders.map {
+            locals.register(Value.I32)
+        }
+
+
+        return listOf<Instr>(
+            Instr.I32Const(case.tag),
+            Instr.GetLocal(tag),
+            Instr.I32Eq,
+
+            Instr.If(Value.I32)
+        ) +
+                binders.mapIndexed { index, binder ->
+                    listOf<Instr>(
+                        Instr.GetLocal(scrutinee),
+                        Instr.I32Load(2, 4 + index * 4L),
+                        Instr.SetLocal(binder)
+                    )
+                }.flatten() +
+                compileExpr(locals, case.body.instantiate(binders.map {
+                    Expression.GetLocal(it)
+                })) +
+
+                Instr.Else +
+                continuation +
+
+                Instr.End
+    }
+
+    fun compileLiteral(lit: Lit): List<Instr> {
+        return when (lit) {
+            is Lit.Int -> listOf(Instr.I32Const(lit.int))
+            is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 1 else 0))
+            is Lit.String -> TODO("string literals unsupported")
+        }
+    }
+
+
+    fun compileExpr(locals: Locals, expr: Expression): List<Instr> {
+        return when (expr) {
+            is Expression.Literal -> compileLiteral(expr.lit)
+            is Expression.Var -> {
+                if (expr.name !is LnName.Free) throw Exception("can't deal with bound names in compileExpr")
+
+                listOf(
+                    Instr.I32Const(arityFor(expr.name.name)),
+                    Instr.I32Const(tableIndexFor(expr.name.name)),
+                    Instr.Call(funcIndexFor("make_closure"))
+                )
+            }
+            is Expression.App -> {
+                compileExpr(locals, expr.func) +
+                        compileExpr(locals, expr.arg) +
+                        Instr.Call(funcIndexFor("apply_closure"))
+            }
+            is Expression.Let -> {
+                val binder = locals.register(Value.I32)
+                compileExpr(locals, expr.expr) +
+                        Instr.SetLocal(binder) +
+                        compileExpr(locals, expr.body.instantiate(listOf(Expression.GetLocal(binder))))
+            }
+            is Expression.If -> {
+                compileExpr(locals, expr.condition) +
+                        Instr.If(Value.I32) +
+                        compileExpr(locals, expr.thenBranch) +
+                        Instr.Else +
+                        compileExpr(locals, expr.elseBranch) +
+                        Instr.End
+            }
+            is Expression.Pack -> {
+                // [2byte tag | 2byte arity | (4byte x arity) fields]
+                val arity = expr.exprs.size
+                val packPointer = locals.register(Value.I32)
+
+                listOf<Instr>(
+                    Instr.I32Const(4 + 4 * arity),
+                    Instr.Call(funcIndexFor("allocate")),
+                    Instr.TeeLocal(packPointer),
+                    Instr.I32Const(expr.tag),
+                    Instr.I32Store16(1, 0),
+                    Instr.GetLocal(packPointer),
+                    Instr.I32Const(arity),
+                    Instr.I32Store16(1, 2)
+                ) + expr.exprs.withIndex().flatMap { (i, e) ->
+                    listOf(Instr.GetLocal(packPointer)) +
+                            compileExpr(locals, e) +
+                            Instr.I32Store(2, 4L + 4 * i)
+                } + Instr.GetLocal(packPointer)
+            }
+            is Expression.Match -> {
+                val scrutinee = locals.register(Value.I32)
+                val tag = locals.register(Value.I32)
+                compileExpr(locals, expr.expr) +
+                        listOf<Instr>(
+                            Instr.TeeLocal(scrutinee),
+                            Instr.I32Load16S(1, 0),
+                            Instr.SetLocal(tag)
+                        ) +
+                        expr.cases.foldRight(listOf<Instr>(Instr.Unreachable)) { case, acc ->
+                            compileCase(locals, case, tag, scrutinee, acc)
+                        }
+            }
+            is Expression.GetLocal -> listOf(Instr.GetLocal(expr.index))
+        }
     }
 
     fun compileProgram(decls: List<Declaration>): Module {
@@ -335,68 +467,8 @@ class Codegen() {
         makePrimitiveBinary("int_gt", Instr.I32GtS)
         makePrimitiveBinary("int_gte", Instr.I32GeS)
 
-        fun compileLiteral(lit: Lit): List<Instr> {
-            return when (lit) {
-                is Lit.Int -> listOf(Instr.I32Const(lit.int))
-                is Lit.Bool -> listOf(Instr.I32Const(if (lit.bool) 1 else 0))
-                is Lit.String -> TODO("string literals unsupported")
-            }
-        }
 
-        fun compileExpr(locals: Locals, expr: Expression): List<Instr> {
-            return when (expr) {
-                is Expression.Literal -> compileLiteral(expr.lit)
-                is Expression.Var -> {
-                    if (expr.name !is LnName.Free) throw Exception("can't deal with bound names in compileExpr")
 
-                    listOf(
-                        Instr.I32Const(arityFor(expr.name.name)),
-                        Instr.I32Const(tableIndexFor(expr.name.name)),
-                        Instr.Call(makeClosure)
-                    )
-                }
-                is Expression.App -> {
-                    compileExpr(locals, expr.func) +
-                            compileExpr(locals, expr.arg) +
-                            Instr.Call(applyClosure)
-                }
-                is Expression.Let -> {
-                    val binder = locals.register(Value.I32)
-                    compileExpr(locals, expr.expr) +
-                            Instr.SetLocal(binder) +
-                            compileExpr(locals, expr.body.instantiate(listOf(Expression.GetLocal(binder))))
-                }
-                is Expression.If -> {
-                    compileExpr(locals, expr.condition) +
-                            Instr.If(Value.I32) +
-                            compileExpr(locals, expr.thenBranch) +
-                            Instr.Else +
-                            compileExpr(locals, expr.elseBranch) +
-                            Instr.End
-                }
-                is Expression.Pack -> {
-                    val arity = expr.exprs.size
-                    val packPointer = locals.register(Value.I32)
-
-                    listOf<Instr>(
-                        Instr.I32Const(4 + 4 * arity),
-                        Instr.Call(allocate),
-                        Instr.TeeLocal(packPointer),
-                        Instr.I32Const(expr.tag),
-                        Instr.I32Store16(1, 0),
-                        Instr.GetLocal(packPointer),
-                        Instr.I32Const(arity),
-                        Instr.I32Store16(1, 2)
-                    ) + expr.exprs.withIndex().flatMap { (i, e) ->
-                        listOf(Instr.GetLocal(packPointer)) +
-                                compileExpr(locals, e) +
-                                Instr.I32Store(2, 4L + 4 * i)
-                    } + Instr.GetLocal(packPointer)
-                }
-                is Expression.Match -> TODO()
-                is Expression.GetLocal -> listOf(Instr.GetLocal(expr.index))
-            }
-        }
 
         fun compileDeclaration(decl: Declaration) {
             val arity = decl.args.size
@@ -438,7 +510,7 @@ class Codegen() {
             },
             globals = globals.map { it.second },
             memories = listOf(Memory(ResizableLimits(1, null))),
-            tables = listOf(Table(ElemType.ANYFUNC, ResizableLimits(globalFuncs.size, null))),
+            tables = listOf(Table(ElemType.ANYFUNC, ResizableLimits(tableFuncs.size, null))),
             elems = listOf(Elem(0, listOf(Instr.I32Const(0)), tableFuncs.map {
                 globalFuncs.indexOfFirst { (name, _) -> name == it }.apply {
                     if (this == -1) throw Exception("unknown table fun $it")

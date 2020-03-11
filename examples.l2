@@ -1,7 +1,7 @@
-type List<a> {
-  Cons(a, List<a>),
-  Nil()
-}
+module Main
+
+import Data::List as L
+import Option
 
 type Unit {
   T()
@@ -38,68 +38,6 @@ let o_get_or_else: forall a. a -> Option<a> -> a =
     };
 
 let void: forall a. a -> Unit = \x. Unit::T();
-
-let cons: forall a. a -> List<a> -> List<a> =
-  \x. \xs. List::Cons(x, xs);
-
-let map : forall a b. (a -> b) -> List<a> -> List<b> =
-  letrec go = \f. \xs. match xs {
-    List::Nil() => List::Nil(),
-    List::Cons(h, t) => List::Cons(f h, go f t),
-  } in
-  go;
-
-let map_index: forall a b. (Int -> a -> b) -> List<a> -> List<b> =
-  letrec go = \i. \f. \xs. match xs {
-    List::Nil() => List::Nil(),
-    List::Cons(h, t) => List::Cons(f i h, go (add 1 i) f t),
-  } in
-  go 0;
-
-let foldl : forall a b. (a -> b -> a) -> a -> List<b> -> a =
-  letrec go = \f. \acc. \xs. match xs {
-    List::Nil() => acc,
-    List::Cons(h, t) => go f (f acc h) t
-  } in
-  go;
-
-let foldr : forall a b. (a -> b -> b) -> b -> List<a> -> b =
-  letrec go = \f. \acc. \xs. match xs {
-    List::Nil() => acc,
-    List::Cons(h, t) => f h (go f acc t)
-  } in
-  go;
-
-let length : forall a. List<a> -> Int =
-  foldl (\acc.\e.add 1 acc) 0;
-
-let reverse : forall a. List<a> -> List<a> =
-  foldl (\xs. \x. List::Cons(x, xs)) List::Nil();
-
-let list_concat : forall a. List<a> -> List<a> -> List<a> =
-  \xs. \ys. foldr (\x. \acc. List::Cons(x, acc)) ys xs;
-
-let list_to_string : forall a. (a -> String) -> List<a> -> String =
-  \format. \xs.
-    match xs {
-      List::Nil() => "[]",
-      List::Cons(h, t) =>
-        let els = foldl (\acc. \el. concat (concat acc ", ") (format el)) (format h) t in
-        concat "[ " (concat els " ]")
-    };
-
-let repeat: forall a. Int -> a -> List<a> =
-  \n. \a.
-    letrec go = \n.
-      if eq n 0 then
-        List::Nil()
-      else
-        List::Cons(a, go (sub n 1)) in
-    go n;
-
-let count: forall a. (a -> Bool) -> List<a> -> Int =
-  \p.
-    foldl (\acc. \a. if p a then add acc 1 else acc) 0;
 
 let cell_to_string: Bool -> String = \x. if x then "X" else "O";
 

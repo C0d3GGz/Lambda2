@@ -9,14 +9,57 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     val iterator = PeekableIterator(tokens)
 
     fun parseSourceFile(): SourceFile {
+        val header = parseModuleHeader()
+        val startPosition = header.span.start
         val parsedDeclarations = mutableListOf<Declaration>()
-        val startPosition = iterator.peek().span.start
         while (true) {
             if (iterator.peek().value == Token.EOF) break
             parsedDeclarations += parseDeclaration()
         }
         val endPosition = parsedDeclarations.lastOrNull()?.span?.end ?: startPosition
-        return SourceFile(parsedDeclarations, Span(startPosition, endPosition))
+        return SourceFile(header, parsedDeclarations, Span(startPosition, endPosition))
+    }
+
+    fun parseModuleHeader(): ModuleHeader {
+        val startPosition = iterator.peek().span.start
+        expectNext<Token.Module>(expectedError("expected module"))
+        val namespace = parseNamespace()
+        val imports = parseImports()
+        // force unwrapping is safe here, because parseNamespace can't return the local namespace
+        val endPosition = imports.lastOrNull()?.span?.end ?: namespace.span!!.end
+        val span = Span(startPosition, endPosition)
+        return ModuleHeader(namespace, imports, span)
+    }
+
+    private fun parseImports(): List<Import> {
+        val imports = mutableListOf<Import>()
+        while (iterator.peek().value is Token.Import) {
+            val start = iterator.next().span.start
+            val ns = parseNamespace()
+            var qualifier = ns
+
+            if (iterator.peek().value is Token.As) {
+                iterator.next()
+                qualifier = parseNamespace()
+            }
+
+            // force unwrapping is safe here, because parseNamespace can't return the local namespace
+            imports += Import.Qualified(ns, qualifier, Span(start, qualifier.span!!.end))
+        }
+
+        return imports
+    }
+
+    private fun parseNamespace(): Namespace {
+        val names = mutableListOf<Name>()
+        names += parseUpperName()
+
+        while (iterator.peek().value is Token.DoubleColon) {
+            iterator.next()
+            names += parseUpperName()
+        }
+
+        return Namespace(names)
     }
 
     fun parseDeclaration(): Declaration {
@@ -273,8 +316,8 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     private fun parseLet(recursive: Boolean): Expression.Let {
         val (letSpan, _) = iterator.next()
         val binder = parseName()
-        var scheme:Scheme? = null
-        if(iterator.peek().value is Token.Colon){
+        var scheme: Scheme? = null
+        if (iterator.peek().value is Token.Colon) {
             iterator.next()
             scheme = parseScheme()
         }
@@ -283,7 +326,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         expectNext<Token.In>(expectedError("expected in"))
         val body = parseExpression()
 
-        return Expression.Let(recursive, binder,scheme, expr, body, Span(letSpan.start, body.span.end))
+        return Expression.Let(recursive, binder, scheme, expr, body, Span(letSpan.start, body.span.end))
     }
 
     private fun parseIf(): Expression.If { // if true then 3 else 4

@@ -1,0 +1,25 @@
+module Option
+
+import List
+
+type Option<a> {
+  Some(a),
+  None()
+}
+
+let flat_map: forall a b. (a -> Option<b>) -> Option<a> -> Option<b> =
+  \f. \o.
+    match o {
+      Option::Some(a) => f a,
+      Option::None() => Option::None()
+    };
+
+let map: forall a b. (a -> b) -> Option<a> -> Option<b> =
+  \f. flat_map \a. Option::Some(f a);
+
+let get_or_else: forall a. a -> Option<a> -> a =
+  \default. \o.
+    match o {
+      Option::Some(a) => a,
+      Option::None() => default
+    };

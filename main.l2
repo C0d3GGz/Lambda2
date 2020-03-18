@@ -1,15 +1,7 @@
 module Main
 
-import Data::List as L
-import Option
-
 type Unit {
   T()
-}
-
-type Option<a> {
-  Some(a),
-  None()
 }
 
 let identity: forall a. a -> a = \a. a;
@@ -20,22 +12,7 @@ let or: Bool -> Bool -> Bool =
   \a. \b.
     if a then true else b;
 
-let o_flat_map: forall a b. (a -> Option<b>) -> Option<a> -> Option<b> =
-  \f. \o.
-    match o {
-      Option::Some(a) => f a,
-      Option::None() => Option::None()
-    };
 
-let o_map: forall a b. (a -> b) -> Option<a> -> Option<b> =
-  \f. o_flat_map \a. Option::Some(f a);
-
-let o_get_or_else: forall a. a -> Option<a> -> a =
-  \default. \o.
-    match o {
-      Option::Some(a) => a,
-      Option::None() => default
-    };
 
 let void: forall a. a -> Unit = \x. Unit::T();
 

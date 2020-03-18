@@ -8,7 +8,7 @@ import lambda.syntax.SourceFile
 import java.util.*
 import lambda.backend.Expression as IRExpression
 
-fun main() {
+/*fun main() {
     val input = """
         let y = 3 in
         letrec f = \x. f y x in f 3
@@ -148,4 +148,4 @@ class Lowering(private val typeTable: Map<Name, List<DataConstructor>>) {
         case.binders.forEachIndexed { index, name -> tempEnv[name] = LnName.Index(0, index) }
         return IRExpression.Case(tagForDtor(case.type, case.dtor), case.binders, lowerExpr(case.body, tempEnv))
     }
-}
+}*/

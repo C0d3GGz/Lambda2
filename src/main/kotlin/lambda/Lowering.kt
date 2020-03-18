@@ -5,7 +5,7 @@ import lambda.syntax.Expression
 import lambda.syntax.Name
 import lambda.syntax.SourceFile
 
-class Lowering() {
+/*class Lowering() {
 
     private var table: Map<Name, List<DataConstructor>> = emptyMap()
 
@@ -63,5 +63,5 @@ class Lowering() {
 
         return sf.valueDeclarations().map { it.name to lowerExpr(it.expr) }
     }
-}
+}*/
 

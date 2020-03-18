@@ -3,10 +3,12 @@ package lambda
 import io.vavr.kotlin.hashSet
 import lambda.syntax.*
 
-
+/*
 fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
 
-typealias TCContext = HashMap<Name, Scheme>
+data class Interface(val types: HashMap<Name, TypeInfo>, val values: HashMap<Name, Scheme>)
+
+typealias TCContext = HashMap<Namespace, Interface>
 
 data class Substitution(val subst: HashMap<Int, Type>) {
     operator fun get(u: Int): Type? = subst[u]
@@ -467,4 +469,4 @@ class Typechecker {
         initialContext.forEach { (t, _) -> ctx.remove(t) }
         return ctx
     }
-}
+}*/

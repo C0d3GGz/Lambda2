@@ -3,6 +3,7 @@ package lambda
 import io.vavr.collection.HashSet
 import io.vavr.kotlin.hashSet
 import lambda.syntax.Name
+import lambda.syntax.Namespace
 
 inline class TyVar(val name: Name) {
     override fun toString(): String = name.toString()
@@ -19,7 +20,7 @@ sealed class Type {
         }
 
     object ErrorSentinel : Type()
-    data class Constructor(val name: Name, val tyArgs: List<Type> = emptyList()) : Type()
+    data class Constructor(val namespace: Namespace, val name: Name, val tyArgs: List<Type> = emptyList()) : Type()
     data class Var(val v: TyVar) : Type()
     data class Unknown(val u: Int) : Type() {
         override fun toString(): String = "u$u"
@@ -52,7 +53,7 @@ sealed class Type {
         return when (this) {
             is Var -> if (v == tyVar) type else this
             is Fun -> Fun(arg.subst(tyVar, type), result.subst(tyVar, type), sp)
-            is Constructor -> Type.Constructor(name, tyArgs.map { it.subst(tyVar, type) })
+            is Constructor -> copy(tyArgs = tyArgs.map { it.subst(tyVar, type) })
             ErrorSentinel, is Unknown -> this
         }
     }
@@ -62,10 +63,10 @@ sealed class Type {
 
     companion object {
         fun v(name: String) = Var(TyVar(Name(name)))
-        val Int = Constructor(Name("Int"))
-        val Bool = Constructor(Name("Bool"))
-        val String = Constructor(Name("String"))
-        val Unit = Constructor(Name("Unit"))
+        val Int = Constructor(Namespace.prim, Name("Int"))
+        val Bool = Constructor(Namespace.prim, Name("Bool"))
+        val String = Constructor(Namespace.prim, Name("String"))
+        val Unit = Constructor(Namespace.prim, Name("Unit"))
     }
 }
 

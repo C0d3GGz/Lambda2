@@ -1,6 +1,8 @@
 package lambda
 
-import lambda.syntax.*
+import lambda.syntax.Expression
+import lambda.syntax.Lit
+import lambda.syntax.Namespace
 
 private object Pretty {
 
@@ -15,7 +17,7 @@ private object Pretty {
     fun prettyPrintExpr(expr: Expression, depth: Int): String {
         return when (expr) {
             is Expression.Literal -> prettyPrintLiteral(expr.lit)
-            is Expression.Var -> "${expr.name}"
+            is Expression.Var -> "${expr.namespace.asQualifier()}${expr.name}"
             is Expression.Lambda -> "(\\${expr.binder}. ${prettyPrintExpr(expr.body, 0)})"
             is Expression.App -> {
                 val output = "${prettyPrintExpr(expr.func, depth)} ${prettyPrintExpr(expr.arg, depth + 1)}"
@@ -27,7 +29,7 @@ private object Pretty {
             is Expression.If ->
                 "if ${expr.condition.pretty()} then ${expr.thenBranch.pretty()} else ${expr.elseBranch.pretty()}"
             is Expression.Construction ->
-                "${expr.type}::${expr.dtor}(${expr.exprs.joinToString(", ") { it.pretty() }})"
+                "${expr.namespace.asQualifier()}${expr.dtor}(${expr.exprs.joinToString(", ") { it.pretty() }})"
             is Expression.Match ->
                 "match ${expr.expr.pretty()} {${expr.cases.joinToString(", ") { it.pretty() }}}"
         }
@@ -70,7 +72,9 @@ private object Pretty {
 
     fun prettyPrintType(type: Type, depth: Int): String {
         return when (type) {
-            is Type.Constructor -> "${type.name}${if (type.tyArgs.isEmpty()) "" else "<${type.tyArgs.joinToString(", ") { it.pretty() }}>"}"
+            is Type.Constructor -> "${type.namespace.asQualifier()}${type.name}${if (type.tyArgs.isEmpty()) "" else "<${type.tyArgs.joinToString(
+                ", "
+            ) { it.pretty() }}>"}"
             is Type.Var -> "${type.v.name}"
             is Type.Fun -> {
                 val output = "${prettyPrintType(type.arg, depth + 1)} -> ${prettyPrintType(type.result, 0)}"
@@ -88,13 +92,15 @@ private object Pretty {
 
 
     fun prettyPrintCase(case: Expression.Case): String {
-        return "${case.type}::${case.dtor}(${case.binders.joinToString(", ")}) => ${case.body.pretty()}"
+        return "${case.namespace.asQualifier()}${case.dtor}(${case.binders.joinToString(", ")}) => ${case.body.pretty()}"
     }
 
     fun prettyPrintRTCase(case: RTExpression.Case): String {
         return "<${case.tag}>(${case.binders.joinToString(", ")}) => ${case.body.pretty()}"
     }
 }
+
+fun Namespace.asQualifier() = if (isLocal()) "" else "$this::"
 
 fun Expression.pretty() = Pretty.prettyPrintExpr(this, 0)
 fun RTExpression.pretty() = Pretty.prettyPrintRTExpr(this, 0)

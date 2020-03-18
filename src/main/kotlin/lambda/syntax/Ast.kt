@@ -60,15 +60,17 @@ inline class Namespace(val names: List<Name>) {
 
     companion object {
         val local = Namespace(emptyList())
+        val prim = Namespace(listOf(Name("Prim")))
     }
 }
 
 sealed class Import {
     abstract val span: Span
+    abstract val namespace: Namespace
 
     // Qualified(Option, Option) => import Option | import Option as Option
     // Qualified(Data::List, L) => import Data::List as L
     // Qualified(Lambda2::AST::Expression, AST::Expression) => import Lambda2::AST::Expression as AST::Expression
     // Qualified(Lambda2::IR::Expression, IR::Expression) => import Lambda2::IR::Expression as IR::Expression
-    data class Qualified(val namespace: Namespace, val alias: Namespace, override val span: Span) : Import()
+    data class Qualified(override val namespace: Namespace, val alias: Namespace, override val span: Span) : Import()
 }

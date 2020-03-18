@@ -1,25 +1,23 @@
 module Option
 
-import List
-
 type Option<a> {
   Some(a),
   None()
 }
 
-let flat_map: forall a b. (a -> Option<b>) -> Option<a> -> Option<b> =
+let flat_map: forall a b. (a -> Option::Option<b>) -> Option::Option<a> -> Option::Option<b> =
   \f. \o.
     match o {
-      Option::Some(a) => f a,
-      Option::None() => Option::None()
+      Option::Option::Some(a) => f a,
+      Option::Option::None() => Option::Option::None()
     };
 
-let map: forall a b. (a -> b) -> Option<a> -> Option<b> =
-  \f. flat_map \a. Option::Some(f a);
+let map: forall a b. (a -> b) -> Option::Option<a> -> Option::Option<b> =
+  \f. Option::flat_map \a. Option::Option::Some(f a);
 
-let get_or_else: forall a. a -> Option<a> -> a =
+let get_or_else: forall a. a -> Option::Option<a> -> a =
   \default. \o.
     match o {
-      Option::Some(a) => a,
-      Option::None() => default
+      Option::Option::Some(a) => a,
+      Option::Option::None() => default
     };

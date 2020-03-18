@@ -56,6 +56,8 @@ inline class Namespace(val names: List<Name>) {
 
     fun isLocal() = names.isEmpty()
 
+    fun splitType() = Namespace(names.dropLast(1)) to names.last()
+
     override fun toString(): String = names.joinToString("::")
 
     companion object {

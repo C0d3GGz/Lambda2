@@ -49,7 +49,7 @@ data class Config(val target: Target, val main: Namespace) {
 
 class Pipeline {
 
-    fun compileModules(files: List<File>, config: Config = Config.default) {
+    fun compileModules(files: List<File>, config: Config = Config.default): MutableList<Pair<Namespace, Interface>> {
         val headers = files.map(::parseModuleHeader)
         val vertices = headers.map { it.namespace.toString() }
         val vertexIndex: (Namespace) -> Int = { ns ->
@@ -62,13 +62,22 @@ class Pipeline {
             imports.map { i to vertexIndex(it.namespace) }
         })
 
-        val ordering = moduleGraph.topoSort()
-        println(ordering)
 
-        TODO("type check against interfaces")
+        val ordering = moduleGraph.topoSort()
+        val sfs = files.map { Parser(Lexer(it.readText())).parseSourceFile() }
+        val interfaces = mutableListOf<Pair<Namespace, Interface>>()
+
+        ordering.forEach { o ->
+            val sf = sfs.find { it.header.namespace.toString() == o }!!
+            val newInterface = Typechecker().inferSourceFile(interfaces, sf)
+
+            interfaces += sf.header.namespace to newInterface
+        }
+
+        return interfaces
     }
 
-    fun parseModuleHeader(file: File): ModuleHeader = Parser(Lexer(file.readText())).parseModuleHeader()
+    private fun parseModuleHeader(file: File): ModuleHeader = Parser(Lexer(file.readText())).parseModuleHeader()
 }
 
 /*fun runFile(file: File) {
@@ -97,7 +106,9 @@ class Pipeline {
 }*/
 
 fun main(args: Array<String>) {
-    Pipeline().compileModules(listOf(File("std/list.l2"), File("main.l2"), File("std/option.l2")))
+    Pipeline()
+        .compileModules(listOf(File("std/list.l2"), File("std/option.l2")))
+        .forEach(::println)
 
     /*val filePath = File(args.getOrElse(0) { "std/list.l2" })
     runFile(filePath)

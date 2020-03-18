@@ -1,14 +1,94 @@
 package lambda
 
-import io.vavr.kotlin.hashSet
 import lambda.syntax.*
 
-/*
-fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
+data class TypeInfo(val typeArgs: List<TyVar>, val dtors: List<DataConstructor>) {
+    companion object {
+        val empty = TypeInfo(emptyList(), emptyList())
+    }
+}
 
 data class Interface(val types: HashMap<Name, TypeInfo>, val values: HashMap<Name, Scheme>)
 
-typealias TCContext = HashMap<Namespace, Interface>
+val primInterface = Namespace.prim to Interface(
+    hashMapOf(
+        Name("Int") to TypeInfo.empty,
+        Name("Bool") to TypeInfo.empty,
+        Name("String") to TypeInfo.empty,
+        Name("Unit") to TypeInfo.empty
+    ),
+    hashMapOf(
+        Name("add") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.Int,
+                Type.Fun(Type.Int, Type.Int)
+            )
+        ),
+        Name("sub") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.Int,
+                Type.Fun(Type.Int, Type.Int)
+            )
+        ),
+        Name("eq") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.Int,
+                Type.Fun(Type.Int, Type.Bool)
+            )
+        ),
+        Name("concat") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.String,
+                Type.Fun(Type.String, Type.String)
+            )
+        ),
+        Name("int_to_string") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.Int,
+                Type.String
+            )
+        ),
+        Name("fix") to Scheme(
+            listOf(TyVar(Name("a"))),
+            Type.Fun(
+                Type.Fun(Type.v("a"), Type.v("a")),
+                Type.v("a")
+            )
+        ),
+        Name("sleep") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.Int,
+                Type.Unit
+            )
+        ),
+        Name("print") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.String,
+                Type.Unit
+            )
+        ),
+        Name("clear") to Scheme(
+            emptyList(),
+            Type.Fun(
+                Type.Unit,
+                Type.Unit
+            )
+        )
+    )
+)
+
+fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
+
+typealias Namespaced = Pair<Namespace, Name>
+typealias TCValueContext = HashMap<Namespaced, Scheme> // List::head : forall a. List<a> -> Option::Option<a>
+typealias TCTypeContext = HashMap<Namespaced, TypeInfo> // List::List: listOf(Cons(a), Nil())
 
 data class Substitution(val subst: HashMap<Int, Type>) {
     operator fun get(u: Int): Type? = subst[u]
@@ -21,7 +101,7 @@ data class Substitution(val subst: HashMap<Int, Type>) {
         return when (type) {
             is Type.ErrorSentinel -> type
             is Type.Var -> type
-            is Type.Constructor -> Type.Constructor(type.name, type.tyArgs.map(::apply))
+            is Type.Constructor -> type.copy(tyArgs = type.tyArgs.map(::apply))
             is Type.Fun -> Type.Fun(apply(type.arg), apply(type.result))
             is Type.Unknown -> subst[type.u].fold(type, ::apply)
         }
@@ -72,14 +152,13 @@ data class Substitution(val subst: HashMap<Int, Type>) {
     }
 }
 
-
 sealed class TypeError : Exception() {
     open var span: Span? = null
 
     data class Unification(val ty1: Type, val ty2: Type, val stack: MutableList<Pair<Type, Type>>) : TypeError()
-    data class UnknownVar(val name: Name, override var span: Span?) : TypeError()
-    data class UnknownType(val name: Name) : TypeError()
-    data class UnknownDtor(val type: Name, val name: Name) : TypeError()
+    data class UnknownVar(val name: Namespaced, override var span: Span?) : TypeError()
+    data class UnknownType(val name: Namespaced) : TypeError()
+    data class UnknownDtor(val name: Namespaced) : TypeError()
     data class OccursCheck(val u: Int, val type: Type) : TypeError()
     data class IfCondition(val type: Type, override var span: Span?) : TypeError()
     class Followup() : TypeError()
@@ -90,7 +169,7 @@ sealed class TypeError : Exception() {
   ${stack.joinToString("\n  ") { (t1, t2) -> "while trying to match ${t1.pretty()} with ${t2.pretty()}" }}"""
         is UnknownVar -> "Unknown var $name"
         is UnknownType -> "Unknown type $name"
-        is UnknownDtor -> "Type $type does not have a constructor named $name"
+        is UnknownDtor -> "Type ${name.first} does not have a constructor named ${name.second}"
         is OccursCheck -> "Failed to infer the infinite type u$u ~ ${type.pretty()}"
         is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
         is Followup -> "Followup error, you shouldn't be seeing this"
@@ -99,118 +178,21 @@ sealed class TypeError : Exception() {
     override fun toString(): String = this.pretty()
 }
 
-private val initialContext: TCContext
-    get() {
-        return hashMapOf(
-            Name("add") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.Int,
-                    Type.Fun(Type.Int, Type.Int)
-                )
-            ),
-            Name("sub") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.Int,
-                    Type.Fun(Type.Int, Type.Int)
-                )
-            ),
-            Name("eq") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.Int,
-                    Type.Fun(Type.Int, Type.Bool)
-                )
-            ),
-            Name("concat") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.String,
-                    Type.Fun(Type.String, Type.String)
-                )
-            ),
-            Name("int_to_string") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.Int,
-                    Type.String
-                )
-            ),
-            Name("fix") to Scheme(
-                listOf(TyVar(Name("a"))),
-                Type.Fun(
-                    Type.Fun(Type.v("a"), Type.v("a")),
-                    Type.v("a")
-                )
-            ),
-            Name("sleep") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.Int,
-                    Type.Unit
-                )
-            ),
-            Name("print") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.String,
-                    Type.Unit
-                )
-            ),
-            Name("clear") to Scheme(
-                emptyList(),
-                Type.Fun(
-                    Type.Unit,
-                    Type.Unit
-                )
-            )
-        )
-    }
-
-data class TypeInfo(val typeArgs: List<TyVar>, val dtors: List<DataConstructor>) {
-    companion object {
-        val empty = TypeInfo(emptyList(), emptyList())
-    }
-}
-
 class Typechecker {
 
     private var fresh: Int = 0
 
     private val substitution: Substitution = Substitution.empty
 
-    val types: MutableMap<Name, TypeInfo> = mutableMapOf(
-        Name("Int") to TypeInfo.empty,
-        Name("Bool") to TypeInfo.empty,
-        Name("String") to TypeInfo.empty
-    )
+    private var typeCtx: TCTypeContext = hashMapOf()
+
+    private var namespace = Namespace.local
 
     fun freshUnknown(): Type.Unknown = Type.Unknown(++fresh)
 
     fun instantiate(scheme: Scheme): Type {
         val mappings = scheme.vars.map { it to freshUnknown() }
         return scheme.ty.substMany(mappings)
-    }
-
-    fun generalize(type: Type, ctx: TCContext): Scheme {
-        val type = zonk(type)
-
-        val unknownsInCtx = ctx.values.map(Scheme::unknowns).fold(hashSet<Int>()) { a, b -> b.union(a) }
-        val unknownVars = type.unknowns().removeAll(unknownsInCtx)
-        val niceVars = ('a'..'z').iterator()
-
-        val subst = hashMapOf<Int, Type>()
-        val quantifier = mutableListOf<TyVar>()
-
-        for (free in unknownVars) {
-            val v = TyVar(Name(niceVars.nextChar().toString()))
-
-            quantifier += v
-            subst[free] = Type.Var(v)
-        }
-
-        return Scheme(quantifier, Substitution(subst).apply(type))
     }
 
     fun unify(t1: Type, t2: Type) {
@@ -231,6 +213,7 @@ class Typechecker {
             t1 is Type.Constructor &&
                     t2 is Type.Constructor &&
                     t1.name == t2.name &&
+                    t1.namespace == t2.namespace &&
                     t1.tyArgs.size == t2.tyArgs.size -> try {
                 t1.tyArgs.zip(t2.tyArgs).forEach { unify(it.first, it.second) }
             } catch (err: TypeError.Unification) {
@@ -238,6 +221,18 @@ class Typechecker {
                 throw err
             }
             else -> throw TypeError.Unification(t1, t2, mutableListOf())
+        }
+    }
+
+    private fun zonk(type: Type): Type = substitution.apply(type)
+
+    private fun zonk(type: Expression.Typed): Expression.Typed = substitution.apply(type)
+
+    private fun varBind(u: Int, type: Type) {
+        return if (type.unknowns().contains(u)) {
+            throw TypeError.OccursCheck(u, type)
+        } else {
+            substitution[u] = type
         }
     }
 
@@ -249,18 +244,6 @@ class Typechecker {
             throw err
         }
 
-    private fun varBind(u: Int, type: Type) {
-        return if (type.unknowns().contains(u)) {
-            throw TypeError.OccursCheck(u, type)
-        } else {
-            substitution[u] = type
-        }
-    }
-
-    private fun zonk(type: Type): Type = substitution.apply(type)
-
-    private fun zonk(type: Expression.Typed): Expression.Typed = substitution.apply(type)
-
     fun reset() {
         fresh = 0
         substitution.subst.clear()
@@ -270,7 +253,7 @@ class Typechecker {
         unify(instantiate(lhs), rhs.ty)
     }
 
-    fun infer(ctx: TCContext, expr: Expression): Expression.Typed {
+    fun infer(ctx: TCValueContext, expr: Expression): Expression.Typed {
         val span = expr.span
         val tyWrap: (Expression, Type) -> Expression.Typed = { e, ty -> Expression.Typed(e, ty, span) }
 
@@ -287,7 +270,7 @@ class Typechecker {
             is Expression.Lambda -> {
                 val tyBinder = freshUnknown()
                 val tmpCtx = HashMap(ctx)
-                tmpCtx[expr.binder] = Scheme.fromType(tyBinder)
+                tmpCtx[Namespace.local to expr.binder] = Scheme.fromType(tyBinder)
 
                 val body = withSpannedError(expr.body.span) {
                     this.infer(tmpCtx, expr.body)
@@ -299,7 +282,8 @@ class Typechecker {
                 )
             }
             is Expression.Var -> {
-                val scheme = ctx[expr.name] ?: throw TypeError.UnknownVar(expr.name, span)
+                val namespaced = expr.namespace to expr.name
+                val scheme = ctx[namespaced] ?: throw TypeError.UnknownVar(namespaced, span)
 
                 // If we try to look up a value that failed to type check before we immediately bail out
                 if (scheme.ty is Type.ErrorSentinel) throw TypeError.Followup()
@@ -326,7 +310,7 @@ class Typechecker {
                 val tyBinder = if (expr.recursive) {
                     val binderUnknown = freshUnknown()
                     val recCtx = HashMap(ctx)
-                    recCtx[expr.binder] = Scheme.fromType(binderUnknown)
+                    recCtx[Namespace.local to expr.binder] = Scheme.fromType(binderUnknown)
 
                     val binder = infer(recCtx, expr.expr)
                     unify(binderUnknown, binder.type)
@@ -337,12 +321,15 @@ class Typechecker {
 
                 val tmpCtx = HashMap(ctx)
 
-                if (expr.scheme != null) {
+                // TODO allow generalization?
+                /*if (expr.scheme != null) {
                     subsumes(generalize(tyBinder.type, ctx), expr.scheme)
                     tmpCtx[expr.binder] = expr.scheme
                 } else {
                     tmpCtx[expr.binder] = Scheme.fromType(tyBinder.type)
-                }
+                }*/
+
+                tmpCtx[Namespace.local to expr.binder] = Scheme.fromType(tyBinder.type)
 
                 val tyBody = infer(tmpCtx, expr.body)
 
@@ -366,8 +353,9 @@ class Typechecker {
             }
 
             is Expression.Construction -> {
-                val (tyArgs, fields) = withSpannedError(Span(expr.type.span.start, expr.dtor.span.end)) {
-                    lookupDtor(expr.type, expr.dtor)
+                val span = Span((expr.namespace.span ?: expr.dtor.span).start, expr.dtor.span.end)
+                val (tyArgs, fields) = withSpannedError(span) {
+                    lookupDtor(expr.namespace, expr.dtor)
                 }
 
                 val typedFields = mutableListOf<Expression.Typed>()
@@ -379,9 +367,11 @@ class Typechecker {
                     typedFields += t
                 }
 
+                val (typeNs, type) = expr.namespace.splitType()
+
                 tyWrap(
-                    Expression.Construction(expr.type, expr.dtor, typedFields, span),
-                    Type.Constructor(expr.type, freshTyArgs.map { it.second })
+                    expr.copy(exprs = typedFields),
+                    Type.Constructor(typeNs, type, freshTyArgs.map { it.second })
                 )
             }
             is Expression.Match -> {
@@ -392,8 +382,8 @@ class Typechecker {
                 expr.cases.forEach { case ->
                     val tmpCtx = HashMap(ctx)
 
-                    inferPattern(case.type, case.dtor, case.binders, tyExpr.type)
-                        .forEach { (name, type) -> tmpCtx[name] = Scheme.fromType(type) }
+                    inferPattern(case.namespace, case.dtor, case.binders, tyExpr.type)
+                        .forEach { (name, type) -> tmpCtx[Namespace.local to name] = Scheme.fromType(type) }
 
                     val tyBody = infer(tmpCtx, case.body)
                     unify(tyBody.type, tyRes)
@@ -409,64 +399,79 @@ class Typechecker {
         }
     }
 
-    fun inferPattern(type: Name, dtor: Name, binders: List<Name>, tyExpr: Type): List<Pair<Name, Type>> {
-        val (tyArgs, fields) = lookupDtor(type, dtor)
+    private fun inferPattern(ns: Namespace, dtor: Name, binders: List<Name>, tyExpr: Type): List<Pair<Name, Type>> {
+        val (tyArgs, fields) = lookupDtor(ns, dtor)
         val freshTyArgs = tyArgs.map { it to freshUnknown() }
-        unify(Type.Constructor(type, freshTyArgs.map { it.second }), tyExpr)
+        val (typeNs, type) = ns.splitType()
+        unify(Type.Constructor(typeNs, type, freshTyArgs.map { it.second }), tyExpr)
 
         return binders.zip(fields.map { it.substMany(freshTyArgs) })
     }
 
-    fun lookupDtor(type: Name, dtor: Name): Pair<List<TyVar>, List<Type>> {
-        val typeInfo = types[type] ?: throw TypeError.UnknownType(type)
-        val dc = typeInfo.dtors.find { it.name == dtor } ?: throw TypeError.UnknownDtor(type, dtor)
+    private fun lookupDtor(ns: Namespace, dtor: Name): Pair<List<TyVar>, List<Type>> {
+        val nsType = ns.splitType()
+        val typeInfo = typeCtx[nsType] ?: throw TypeError.UnknownType(nsType)
+        val dc = typeInfo.dtors.find { it.name == dtor } ?: throw TypeError.UnknownDtor(ns to dtor)
         return typeInfo.typeArgs to dc.fields
     }
 
-    fun inferExpr(expr: Expression): Scheme {
-        val t = try {
-            reset()
-            zonk(infer(initialContext, expr))
-        } catch (err: TypeError) {
-            println("error: ${err.pretty()} ${if (err.span == Span.DUMMY) "" else err.span.toString()}")
-            throw RuntimeException("type errors occurred")
-        }
-        println("inferred AST: ${t.pretty()}")
-        return generalize(t.type, initialContext)
-    }
+    fun inferSourceFile(interfaces: List<Pair<Namespace, Interface>>, file: SourceFile): Interface {
+        fun ctxFromInterfaces(interfaces: List<Pair<Namespace, Interface>>): Pair<TCTypeContext, TCValueContext> {
+            val typeCtx: TCTypeContext = hashMapOf()
+            val valueCtx: TCValueContext = hashMapOf()
 
-    fun inferSourceFile(file: SourceFile): HashMap<Name, Scheme> {
-        val ctx = initialContext
+            interfaces.forEach { (ns, i) ->
+                val (types, values) = i
+
+                types.forEach { (name, typeInfo) ->
+                    typeCtx[ns to name] = typeInfo
+                }
+
+                values.forEach { (name, scheme) ->
+                    valueCtx[ns to name] = scheme
+                }
+            }
+
+            return typeCtx to valueCtx
+        }
+
+        namespace = file.header.namespace
         var errored = false
 
+        val (typeCtx, valueCtx) = ctxFromInterfaces(listOf(primInterface) + interfaces)
         file.typeDeclarations().forEach {
-            types.putIfAbsent(it.name, TypeInfo(it.tyArgs, it.dataConstructors))
+            typeCtx.putIfAbsent(namespace to it.name, TypeInfo(it.tyArgs, it.dataConstructors))
         }
+
+        this.typeCtx = typeCtx
 
         file.valueDeclarations().forEach {
             try {
                 reset()
-                val t = zonk(infer(ctx, it.expr))
+                val t = zonk(infer(valueCtx, it.expr))
                 // println(this.substitution.toString())
-                val scheme = generalize(t.type, ctx)
+                val scheme = Scheme.fromType(t.type) //generalize(t.type, ctx)
 
                 withSpannedError(it.span) {
                     subsumes(scheme, it.scheme)
                 }
 
-                ctx[it.name] = it.scheme
+                valueCtx[namespace to it.name] = it.scheme
             } catch (err: TypeError) {
                 errored = true
                 if (err !is TypeError.Followup) {
                     println("error ${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}")
                 }
-                ctx[it.name] = Scheme.fromType(Type.ErrorSentinel)
+                valueCtx[namespace to it.name] = Scheme.fromType(Type.ErrorSentinel)
             }
         }
 
         if (errored) throw Exception("Type errors occurred")
 
-        initialContext.forEach { (t, _) -> ctx.remove(t) }
-        return ctx
+        return Interface(
+            HashMap(typeCtx.mapNotNull { if (it.key.first == namespace) it.key.second to it.value else null }.toMap()),
+            HashMap(valueCtx.mapNotNull { if (it.key.first == namespace) it.key.second to it.value else null }.toMap())
+        )
     }
-}*/
+}
+

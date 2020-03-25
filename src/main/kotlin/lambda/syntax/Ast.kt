@@ -43,6 +43,9 @@ data class DataConstructor(val name: Name, val fields: List<Type>, val span: Spa
 // Namespace(listOf("Option")) => Option
 // Namespace(emptyList()) => local namespace
 inline class Namespace(val names: List<Name>) {
+
+    constructor(name: Name): this(listOf(name))
+
     val span: Span?
         get() = names.firstOrNull()?.let { first ->
             val start = first.span.start
@@ -57,6 +60,8 @@ inline class Namespace(val names: List<Name>) {
     fun isLocal() = names.isEmpty()
 
     fun splitType() = Namespace(names.dropLast(1)) to names.last()
+
+    fun nest(name: Name): Namespace = Namespace(names + name)
 
     override fun toString(): String = names.joinToString("::")
 

@@ -1,5 +1,6 @@
 package lambda
 
+import lambda.renamer.renameModule
 import lambda.syntax.ModuleHeader
 import lambda.syntax.Name
 import lambda.syntax.Namespace
@@ -69,9 +70,10 @@ class Pipeline {
 
         ordering.forEach { o ->
             val sf = sfs.find { it.header.namespace.toString() == o }!!
-            val newInterface = Typechecker().inferSourceFile(interfaces, sf)
+            val renamedSf = renameModule(sf)
+            val newInterface = Typechecker().inferSourceFile(interfaces, renamedSf)
 
-            interfaces += sf.header.namespace to newInterface
+            interfaces += renamedSf.header.namespace to newInterface
         }
 
         return interfaces

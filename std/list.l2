@@ -7,18 +7,18 @@ type List<a> {
   Nil()
 }
 
-let head: forall a. List::List<a> -> Option::Option<a> =
+let head: forall a. List<a> -> O::Option<a> =
   \xs. match xs {
-    List::List::Nil() => Option::Option::None(),
-    List::List::Cons(h, _) => Option::Option::Some(h),
+    List::Nil() => O::Option::None(),
+    List::Cons(h, _) => O::Option::Some(h),
   };
 
-let cons: forall a. a -> List::List<a> -> List::List<a> =
-  \x. \xs. List::List::Cons(x, xs);
+let cons: forall a. a -> List<a> -> List<a> =
+  \x. \xs. List::Cons(x, xs);
 
-let map : forall a b. (a -> b) -> List::List<a> -> List::List<b> =
+let map : forall a b. (a -> b) -> List<a> -> List<b> =
   letrec go = \f. \xs. match xs {
-    List::List::Nil() => List::List::Nil(),
-    List::List::Cons(h, t) => List::List::Cons(f h, go f t),
+    List::Nil() => List::Nil(),
+    List::Cons(h, t) => List::Cons(f h, go f t),
   } in
   go;

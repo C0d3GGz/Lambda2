@@ -9,7 +9,11 @@ typealias Aliases = PersistentMap<Namespace, Namespace>
 typealias Types = PersistentMap<Name, Namespace>
 typealias Values = PersistentMap<Name, Namespace>
 
-data class Context(val currentNamespace: Namespace, val aliases: Aliases, val types: Types, val values: Values)
+data class Context(val currentNamespace: Namespace, val aliases: Aliases, val types: Types, val values: Values) {
+    fun extendValues(name: Name, namespace: Namespace): Context = copy(values = values.put(name, namespace))
+    fun extendTypes(name: Name, namespace: Namespace): Context = copy(types = types.put(name, namespace))
+    fun extendAliases(alias: Namespace, namespace: Namespace): Context = copy(aliases = aliases.put(alias, namespace))
+}
 
 fun renameModule(module: SourceFile): SourceFile {
     val initialTypes = persistentHashMapOf(
@@ -27,7 +31,7 @@ fun renameModule(module: SourceFile): SourceFile {
 
     val context0 = module.header.imports.fold(initialCtx) { acc, import ->
         when (import) {
-            is Import.Qualified -> acc.copy(aliases = acc.aliases.put(import.alias, import.namespace))
+            is Import.Qualified -> acc.extendAliases(import.alias, import.namespace)
         }
     }
 
@@ -37,10 +41,9 @@ fun renameModule(module: SourceFile): SourceFile {
         if (acc.aliases.contains(Namespace(type.name)))
             throw Exception("can't define the type ${type.name} because it shadows an import")
 
-        acc.copy(
-            aliases = acc.aliases.put(Namespace(type.name), acc.currentNamespace.nest(type.name)),
-            types = acc.types.put(type.name, acc.currentNamespace)
-        )
+        acc
+            .extendAliases(Namespace(type.name), acc.currentNamespace.nest(type.name))
+            .extendTypes(type.name, acc.currentNamespace)
     }
 
     return SourceFile(
@@ -56,7 +59,7 @@ fun renameModule(module: SourceFile): SourceFile {
 private fun renameDeclaration(ctx: Context, declaration: Declaration): Pair<Context, Declaration> {
     return when (declaration) {
         is Declaration.Value -> {
-            ctx.copy(values = ctx.values.put(declaration.name, ctx.currentNamespace)) to
+            ctx.extendValues(declaration.name, ctx.currentNamespace) to
                     declaration.copy(
                         scheme = renameScheme(ctx, declaration.scheme),
                         expr = renameExpr(ctx, declaration.expr)
@@ -88,7 +91,7 @@ private fun renameExpr(ctx: Context, expr: Expression): Expression {
             elseBranch = renameExpr(ctx, expr.elseBranch)
         )
         is Expression.Let -> {
-            val extendedCtx = ctx.copy(values = ctx.values.put(expr.binder, Namespace.local))
+            val extendedCtx = ctx.extendValues(expr.binder, Namespace.local)
 
             expr.copy(
                 scheme = expr.scheme?.let { renameScheme(ctx, it) },
@@ -97,7 +100,7 @@ private fun renameExpr(ctx: Context, expr: Expression): Expression {
             )
         }
         is Expression.Lambda -> expr.copy(
-            body = renameExpr(ctx.copy(values = ctx.values.put(expr.binder, Namespace.local)), expr.body)
+            body = renameExpr(ctx.extendValues(expr.binder, Namespace.local), expr.body)
         )
         is Expression.Var -> expr.copy(
             namespace = if (expr.namespace.isLocal())
@@ -126,7 +129,7 @@ fun renameDtor(ctx: Context, namespace: Namespace): Namespace {
 fun renameCase(ctx: Context, case: Expression.Case): Expression.Case = case.copy(
     namespace = renameDtor(ctx, case.namespace),
     body = renameExpr(
-        ctx.copy(values = ctx.values.putAll(case.binders.map { it to Namespace.local }.toMap())),
+        case.binders.fold(ctx) { acc, binder -> acc.extendValues(binder, Namespace.local) },
         case.body
     )
 )

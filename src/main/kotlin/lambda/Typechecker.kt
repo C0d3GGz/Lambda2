@@ -1,5 +1,7 @@
 package lambda
 
+import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.persistentHashMapOf
 import lambda.syntax.*
 
 data class TypeInfo(val typeArgs: List<TyVar>, val dtors: List<DataConstructor>) {
@@ -87,8 +89,8 @@ val primInterface = Namespace.prim to Interface(
 fun <T, U> T?.fold(empty: U, f: (T) -> U) = this?.let(f) ?: empty
 
 typealias Namespaced = Pair<Namespace, Name>
-typealias TCValueContext = HashMap<Namespaced, Scheme> // List::head : forall a. List<a> -> Option::Option<a>
-typealias TCTypeContext = HashMap<Namespaced, TypeInfo> // List::List: listOf(Cons(a), Nil())
+typealias TCValueContext = PersistentMap<Namespaced, Scheme> // List::head : forall a. List<a> -> Option::Option<a>
+typealias TCTypeContext = PersistentMap<Namespaced, TypeInfo> // List::List: listOf(Cons(a), Nil())
 
 data class Substitution(val subst: HashMap<Int, Type>) {
     operator fun get(u: Int): Type? = subst[u]
@@ -161,7 +163,7 @@ sealed class TypeError : Exception() {
     data class UnknownDtor(val name: Namespaced) : TypeError()
     data class OccursCheck(val u: Int, val type: Type) : TypeError()
     data class IfCondition(val type: Type, override var span: Span?) : TypeError()
-    class Followup() : TypeError()
+    object Followup : TypeError()
 
     fun pretty(): String = when (this) {
         is Unification ->
@@ -184,7 +186,7 @@ class Typechecker {
 
     private val substitution: Substitution = Substitution.empty
 
-    private var typeCtx: TCTypeContext = hashMapOf()
+    private var typeCtx: TCTypeContext = persistentHashMapOf()
 
     private var namespace = Namespace.local
 
@@ -269,11 +271,9 @@ class Typechecker {
             }
             is Expression.Lambda -> {
                 val tyBinder = freshUnknown()
-                val tmpCtx = HashMap(ctx)
-                tmpCtx[Namespace.local to expr.binder] = Scheme.fromType(tyBinder)
 
                 val body = withSpannedError(expr.body.span) {
-                    this.infer(tmpCtx, expr.body)
+                    this.infer(ctx.put(Namespace.local to expr.binder, Scheme.fromType(tyBinder)), expr.body)
                 }
 
                 tyWrap(
@@ -286,7 +286,7 @@ class Typechecker {
                 val scheme = ctx[namespaced] ?: throw TypeError.UnknownVar(namespaced, span)
 
                 // If we try to look up a value that failed to type check before we immediately bail out
-                if (scheme.ty is Type.ErrorSentinel) throw TypeError.Followup()
+                if (scheme.ty is Type.ErrorSentinel) throw TypeError.Followup
                 tyWrap(expr, instantiate(scheme))
             }
             is Expression.App -> {
@@ -309,17 +309,14 @@ class Typechecker {
             is Expression.Let -> {
                 val tyBinder = if (expr.recursive) {
                     val binderUnknown = freshUnknown()
-                    val recCtx = HashMap(ctx)
-                    recCtx[Namespace.local to expr.binder] = Scheme.fromType(binderUnknown)
-
-                    val binder = infer(recCtx, expr.expr)
+                    val recCtx = ctx.put(Namespace.local to expr.binder, Scheme.fromType(binderUnknown))
+                    val binder =
+                        infer(recCtx, expr.expr)
                     unify(binderUnknown, binder.type)
                     binder
                 } else {
                     infer(ctx, expr.expr)
                 }
-
-                val tmpCtx = HashMap(ctx)
 
                 // TODO allow generalization?
                 /*if (expr.scheme != null) {
@@ -329,9 +326,8 @@ class Typechecker {
                     tmpCtx[expr.binder] = Scheme.fromType(tyBinder.type)
                 }*/
 
-                tmpCtx[Namespace.local to expr.binder] = Scheme.fromType(tyBinder.type)
-
-                val tyBody = infer(tmpCtx, expr.body)
+                val bodyCtx = ctx.put(Namespace.local to expr.binder, Scheme.fromType(tyBinder.type))
+                val tyBody = infer(bodyCtx, expr.body)
 
                 tyWrap(Expression.Let(expr.recursive, expr.binder, expr.scheme, tyBinder, tyBody, span), tyBody.type)
             }
@@ -380,12 +376,11 @@ class Typechecker {
                 val tyCases = mutableListOf<Expression.Case>()
 
                 expr.cases.forEach { case ->
-                    val tmpCtx = HashMap(ctx)
 
-                    inferPattern(case.namespace, case.dtor, case.binders, tyExpr.type)
-                        .forEach { (name, type) -> tmpCtx[Namespace.local to name] = Scheme.fromType(type) }
+                    val bodyCtx = inferPattern(case.namespace, case.dtor, case.binders, tyExpr.type)
+                        .fold(ctx) { acc, (name, type) -> acc.put(Namespace.local to name, Scheme.fromType(type)) }
 
-                    val tyBody = infer(tmpCtx, case.body)
+                    val tyBody = infer(bodyCtx, case.body)
                     unify(tyBody.type, tyRes)
 
                     tyCases += case.copy(body = tyBody)
@@ -417,19 +412,13 @@ class Typechecker {
 
     fun inferSourceFile(interfaces: List<Pair<Namespace, Interface>>, file: SourceFile): Interface {
         fun ctxFromInterfaces(interfaces: List<Pair<Namespace, Interface>>): Pair<TCTypeContext, TCValueContext> {
-            val typeCtx: TCTypeContext = hashMapOf()
-            val valueCtx: TCValueContext = hashMapOf()
+            val typeCtx0: TCTypeContext = persistentHashMapOf()
+            val valueCtx0: TCValueContext = persistentHashMapOf()
 
-            interfaces.forEach { (ns, i) ->
-                val (types, values) = i
-
-                types.forEach { (name, typeInfo) ->
-                    typeCtx[ns to name] = typeInfo
-                }
-
-                values.forEach { (name, scheme) ->
-                    valueCtx[ns to name] = scheme
-                }
+            val (typeCtx, valueCtx) = interfaces.fold(typeCtx0 to valueCtx0) { (typeCtx, valueCtx), (ns, i) ->
+                val newTypeCtx = typeCtx.putAll(i.types.map { (name, typeInfo) -> ((ns to name) to typeInfo) }.toMap())
+                val newValueCtx = valueCtx.putAll(i.values.map { (name, scheme) -> ((ns to name) to scheme) }.toMap())
+                newTypeCtx to newValueCtx
             }
 
             return typeCtx to valueCtx
@@ -438,17 +427,23 @@ class Typechecker {
         namespace = file.header.namespace
         var errored = false
 
-        val (typeCtx, valueCtx) = ctxFromInterfaces(listOf(primInterface) + interfaces)
-        file.typeDeclarations().forEach {
-            typeCtx.putIfAbsent(namespace to it.name, TypeInfo(it.tyArgs, it.dataConstructors))
+        val (typeCtx0, valueCtx0) = ctxFromInterfaces(listOf(primInterface) + interfaces)
+        val typeCtx = file.typeDeclarations().fold(typeCtx0) { acc, decl ->
+            if (acc.containsKey(namespace to decl.name))
+                acc
+            else
+                acc.put(
+                    namespace to decl.name,
+                    TypeInfo(decl.tyArgs, decl.dataConstructors)
+                )
         }
 
         this.typeCtx = typeCtx
 
-        file.valueDeclarations().forEach {
+        val valueCtx = file.valueDeclarations().fold(valueCtx0) { ctx, it ->
             try {
                 reset()
-                val t = zonk(infer(valueCtx, it.expr))
+                val t = zonk(infer(ctx, it.expr))
                 // println(this.substitution.toString())
                 val scheme = Scheme.fromType(t.type) //generalize(t.type, ctx)
 
@@ -456,13 +451,13 @@ class Typechecker {
                     subsumes(scheme, it.scheme)
                 }
 
-                valueCtx[namespace to it.name] = it.scheme
+                ctx.put(namespace to it.name, it.scheme)
             } catch (err: TypeError) {
                 errored = true
                 if (err !is TypeError.Followup) {
                     println("error ${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}")
                 }
-                valueCtx[namespace to it.name] = Scheme.fromType(Type.ErrorSentinel)
+                ctx.put(namespace to it.name, Scheme.fromType(Type.ErrorSentinel))
             }
         }
 

@@ -82,6 +82,10 @@ val primInterface = Namespace.prim to Interface(
                 Type.Unit,
                 Type.Unit
             )
+        ),
+        Name("unit") to Scheme(
+            emptyList(),
+            Type.Unit
         )
     )
 )

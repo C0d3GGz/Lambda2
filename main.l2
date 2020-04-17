@@ -1,100 +1,12 @@
 module Main
 
-type Unit {
-  T()
-}
-
-let identity: forall a. a -> a = \a. a;
-
-let const: forall a b. a -> b -> a = \a. \b. a;
-
-let or: Bool -> Bool -> Bool =
-  \a. \b.
-    if a then true else b;
-
-
-
-let void: forall a. a -> Unit = \x. Unit::T();
-
-let cell_to_string: Bool -> String = \x. if x then "X" else "O";
-
-let print_column: List<Bool> -> Unit =
-  \col.
-    void (print (list_to_string cell_to_string col));
-
-let print_world: List<List<Bool>> -> Unit =
-  \world.
-    void (map print_column world);
-
-let modify_at: forall a. Int -> (a -> a) -> List<a> -> List<a> =
-  \x. \f.
-    map_index \i. \e. if eq i x then f e else e;
-
-let set_cell: Int -> Int -> Bool -> List<List<Bool>> -> List<List<Bool>> =
-  \x. \y. \new.
-    modify_at x (modify_at y (const new));
-
-let get_at: forall a. Int -> List<a> -> Option<a> =
-  letrec go =
-    \n. \xs.
-      match xs {
-        List::Nil() => Option::None(),
-        List::Cons(h, t) => if eq n 0 then Option::Some(h) else go (sub n 1) t
-      } in
-  go;
-
-let get_cell: Int -> Int -> List<List<Bool>> -> Option<Bool> =
-  \x. \y. \world.
-    let col = get_at x world in
-    o_flat_map (get_at y) col;
-
-let neighbours: List<List<Bool>> -> Int -> Int -> List<Bool> =
-  \world. \x. \y.
-    let gc = \x. \y. o_get_or_else false (get_cell x y world) in
-
-    cons (gc (add x 1) y)
-    (cons (gc (add x 1) (add y 1))
-    (cons (gc (add x 1) (sub y 1))
-    (cons (gc (sub x 1) y)
-    (cons (gc (sub x 1) (add y 1))
-    (cons (gc (sub x 1) (sub y 1))
-    (cons (gc x (sub y 1))
-    (cons (gc x (add y 1))
-    List::Nil())))))));
-
-let evolve_cell: List<List<Bool>> -> Int -> Int -> Bool -> Bool =
-  \world. \x. \y. \was_alive.
-    let alive_neighbours = count identity (neighbours world x y) in
-
-    if was_alive then
-      or (eq 2 alive_neighbours) (eq 3 alive_neighbours)
-    else
-      eq 3 alive_neighbours;
-
-let evolve: List<List<Bool>> -> List<List<Bool>> =
-  \world.
-    map_index (\x. map_index (\y. evolve_cell world x y)) world;
-
-let game_loop: List<List<Bool>> -> Int -> Unit =
-  letrec game_loop_go =
-    \world. \n.
-      if eq n 0 then
-        let _ = clear Unit::T() in
-        print_world world
-      else
-        let _ = clear Unit::T() in
-        let _ = print_world world in
-        let _ = sleep 1000 in
-        game_loop_go (evolve world) (sub n 1) in
-  game_loop_go;
+import List as List
+import Option as Option
 
 let main: Unit =
-  let col: List<Bool> = repeat 5 false in
-  let world: List<List<Bool>> = repeat 5 col in
-  let new_world: List<List<Bool>> =
-    set_cell 1 2 true
-    (set_cell 2 2 true
-    (set_cell 3 2 true world)) in
-
-  game_loop new_world 1;
-
+ let xs = List::List::Cons(1, List::List::Nil()) in
+ let head = List::head xs in
+ match head {
+  Option::Option::Some(head) => print(int_to_string head),
+  Option::Option::None() => print("none"),
+ };

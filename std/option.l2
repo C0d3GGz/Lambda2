@@ -1,23 +1,23 @@
 module Option
 
-type Option<a> {
+type T<a> {
   Some(a),
   None()
 }
 
-let flat_map: forall a b. (a -> Option<b>) -> Option<a> -> Option<b> =
+let flat_map: forall a b. (a -> T<b>) -> T<a> -> T<b> =
   \f. \o.
     match o {
-      Option::Some(a) => f a,
-      Option::None() => Option::None()
+      T::Some(a) => f a,
+      T::None() => T::None()
     };
 
-let map: forall a b. (a -> b) -> Option<a> -> Option<b> =
-  \f. flat_map \a. Option::Some(f a);
+let map: forall a b. (a -> b) -> T<a> -> T<b> =
+  \f. flat_map \a. T::Some(f a);
 
-let get_or_else: forall a. a -> Option<a> -> a =
+let get_or_else: forall a. a -> T<a> -> a =
   \default. \o.
     match o {
-      Option::Some(a) => a,
-      Option::None() => default
+      T::Some(a) => a,
+      T::None() => default
     };

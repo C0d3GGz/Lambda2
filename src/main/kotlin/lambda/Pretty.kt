@@ -37,8 +37,8 @@ private object Pretty {
 
     fun prettyContext(ctx: Context): String {
         val context: String = ctx.toList().fold("") { acc, (name, expr) ->
-            if (name.value != "add") {
-                acc + "${name.value} -> ${expr.pretty()}, "
+            if (name.second.value != "add") {
+                acc + "${name.second.value} -> ${expr.pretty()}, "
             } else {
                 acc
             }

@@ -4,6 +4,7 @@ import lambda.renamer.renameModule
 import lambda.syntax.ModuleHeader
 import lambda.syntax.Name
 import lambda.syntax.Namespace
+import lambda.syntax.SourceFile
 import java.io.File
 
 
@@ -67,14 +68,30 @@ class Pipeline {
         val ordering = moduleGraph.topoSort()
         val sfs = files.map { Parser(Lexer(it.readText())).parseSourceFile() }
         val interfaces = mutableListOf<Pair<Namespace, Interface>>()
+        val sfs2 = mutableListOf<SourceFile>()
 
         ordering.forEach { o ->
             val sf = sfs.find { it.header.namespace.toString() == o }!!
             val renamedSf = renameModule(sf)
+            sfs2 += renamedSf
             val newInterface = Typechecker().inferSourceFile(interfaces, renamedSf)
 
             interfaces += renamedSf.header.namespace to newInterface
         }
+
+        val rts = sfs2.map { it.header.namespace to Lowering().lowerSourceFile(it, interfaces) }
+        var result: RTExpression? = null
+
+        rts.fold(initialContext()) { acc, (ns, exprs) ->
+            val (resCtx, expr) = evalExprs(acc, ns, exprs)
+
+            if (ns == config.main)
+                result = expr
+
+            resCtx
+        }
+
+        println(result)
 
         return interfaces
     }
@@ -109,8 +126,10 @@ class Pipeline {
 
 fun main(args: Array<String>) {
     Pipeline()
-        .compileModules(listOf(File("std/list.l2"), File("std/option.l2")))
-        .forEach(::println)
+        .compileModules(
+            listOf(File("std/list.l2"), File("gol.l2"), File("std/option.l2")),
+            Config(Target.Interpreter, Namespace(listOf(Name("GameOfLife"))))
+        )
 
     /*val filePath = File(args.getOrElse(0) { "std/list.l2" })
     runFile(filePath)

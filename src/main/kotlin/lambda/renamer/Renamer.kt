@@ -24,7 +24,15 @@ fun renameModule(module: SourceFile): SourceFile {
     )
 
     val initialValues = persistentHashMapOf(
-        Name("add") to Namespace.prim
+        Name("add") to Namespace.prim,
+        Name("sub") to Namespace.prim,
+        Name("eq") to Namespace.prim,
+        Name("concat") to Namespace.prim,
+        Name("int_to_string") to Namespace.prim,
+        Name("sleep") to Namespace.prim,
+        Name("clear") to Namespace.prim,
+        Name("unit") to Namespace.prim,
+        Name("print") to Namespace.prim
     )
 
     val initialCtx = Context(module.header.namespace, persistentHashMapOf(), initialTypes, initialValues)

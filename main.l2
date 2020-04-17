@@ -1,0 +1,12 @@
+module Main
+
+import List as List
+import Option as Option
+
+let main: Unit =
+ let xs = List::List::Cons(1, List::List::Nil()) in
+ let head = List::head xs in
+ match head {
+  Option::Option::Some(head) => print(int_to_string head),
+  Option::Option::None() => print("none"),
+ };

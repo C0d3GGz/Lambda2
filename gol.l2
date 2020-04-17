@@ -1,0 +1,84 @@
+module GameOfLife
+
+import List
+import Option
+
+let identity: forall a. a -> a = \a. a;
+
+let const: forall a b. a -> b -> a = \a. \b. a;
+
+let or: Bool -> Bool -> Bool =
+  \a. \b.
+    if a then true else b;
+
+let void: forall a. a -> Unit = \x. unit;
+
+let cell_to_string: Bool -> String = \x. if x then "X" else "O";
+
+let print_column: List::T<Bool> -> Unit =
+  \col.
+    void (print (List::to_string cell_to_string col));
+
+let print_world: List::T<List::T<Bool>> -> Unit =
+  \world.
+    void (List::map print_column world);
+
+let set_cell: Int -> Int -> Bool -> List::T<List::T<Bool>> -> List::T<List::T<Bool>> =
+  \x. \y. \new.
+    List::modify_at x (List::modify_at y (const new));
+
+let get_cell: Int -> Int -> List::T<List::T<Bool>> -> Option::T<Bool> =
+  \x. \y. \world.
+    let col = List::get_at x world in
+    Option::flat_map (List::get_at y) col;
+
+let neighbours: List::T<List::T<Bool>> -> Int -> Int -> List::T<Bool> =
+  \world. \x. \y.
+    let gc = \x. \y. Option::get_or_else false (get_cell x y world) in
+
+    List::cons (gc (add x 1) y)
+    (List::cons (gc (add x 1) (add y 1))
+    (List::cons (gc (add x 1) (sub y 1))
+    (List::cons (gc (sub x 1) y)
+    (List::cons (gc (sub x 1) (add y 1))
+    (List::cons (gc (sub x 1) (sub y 1))
+    (List::cons (gc x (sub y 1))
+    (List::cons (gc x (add y 1))
+    List::T::Nil())))))));
+
+let evolve_cell: List::T<List::T<Bool>> -> Int -> Int -> Bool -> Bool =
+  \world. \x. \y. \was_alive.
+    let alive_neighbours = List::count identity (neighbours world x y) in
+
+    if was_alive then
+      or (eq 2 alive_neighbours) (eq 3 alive_neighbours)
+    else
+      eq 3 alive_neighbours;
+
+let evolve: List::T<List::T<Bool>> -> List::T<List::T<Bool>> =
+  \world.
+    List::map_index (\x. List::map_index (\y. evolve_cell world x y)) world;
+
+let game_loop: List::T<List::T<Bool>> -> Int -> Unit =
+  letrec game_loop_go =
+    \world. \n.
+      if eq n 0 then
+        let _ = clear unit in
+        print_world world
+      else
+        let _ = clear unit in
+        let _ = print_world world in
+        let _ = sleep 1000 in
+        game_loop_go (evolve world) (sub n 1) in
+  game_loop_go;
+
+let main: Unit =
+  let col: List::T<Bool> = List::repeat 5 false in
+  let world: List::T<List::T<Bool>> = List::repeat 5 col in
+  let new_world: List::T<List::T<Bool>> =
+    set_cell 1 2 true
+    (set_cell 2 2 true
+    (set_cell 3 2 true world)) in
+
+  game_loop new_world 10;
+

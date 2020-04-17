@@ -9,14 +9,57 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
     val iterator = PeekableIterator(tokens)
 
     fun parseSourceFile(): SourceFile {
+        val header = parseModuleHeader()
+        val startPosition = header.span.start
         val parsedDeclarations = mutableListOf<Declaration>()
-        val startPosition = iterator.peek().span.start
         while (true) {
             if (iterator.peek().value == Token.EOF) break
             parsedDeclarations += parseDeclaration()
         }
         val endPosition = parsedDeclarations.lastOrNull()?.span?.end ?: startPosition
-        return SourceFile(parsedDeclarations, Span(startPosition, endPosition))
+        return SourceFile(header, parsedDeclarations, Span(startPosition, endPosition))
+    }
+
+    fun parseModuleHeader(): ModuleHeader {
+        val startPosition = iterator.peek().span.start
+        expectNext<Token.Module>(expectedError("expected module"))
+        val namespace = parseNamespace()
+        val imports = parseImports()
+        // force unwrapping is safe here, because parseNamespace can't return the local namespace
+        val endPosition = imports.lastOrNull()?.span?.end ?: namespace.span!!.end
+        val span = Span(startPosition, endPosition)
+        return ModuleHeader(namespace, imports, span)
+    }
+
+    private fun parseImports(): List<Import> {
+        val imports = mutableListOf<Import>()
+        while (iterator.peek().value is Token.Import) {
+            val start = iterator.next().span.start
+            val ns = parseNamespace()
+            var qualifier = ns
+
+            if (iterator.peek().value is Token.As) {
+                iterator.next()
+                qualifier = parseNamespace()
+            }
+
+            // force unwrapping is safe here, because parseNamespace can't return the local namespace
+            imports += Import.Qualified(ns, qualifier, Span(start, qualifier.span!!.end))
+        }
+
+        return imports
+    }
+
+    private fun parseNamespace(): Namespace {
+        val names = mutableListOf<Name>()
+        names += parseUpperName()
+
+        while (iterator.peek().value is Token.DoubleColon) {
+            iterator.next()
+            names += parseUpperName()
+        }
+
+        return Namespace(names)
     }
 
     fun parseDeclaration(): Declaration {
@@ -128,7 +171,11 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
                 type
             }
             is Token.UpperIdent -> {
-                val name = parseUpperName()
+                val (ns, name) = parseQualifier()
+
+                if (name == null)
+                    throw Exception("expected a qualified type constructor at ${ns.span}")
+
                 var tyArgs = emptyList<Type>()
 
                 if (iterator.peek().value is Token.LAngle) {
@@ -138,7 +185,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
                     expectNext<Token.RAngle>(expectedError("expected closing angle"))
                 }
 
-                Type.Constructor(name, tyArgs)
+                Type.Constructor(ns, name, tyArgs)
             }
             is Token.Ident -> {
                 Type.Var(parseTyVar())
@@ -161,9 +208,9 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return Name(ident.ident, span)
     }
 
-    fun parseVar(): Expression.Var {
+    fun parseVar(namespace: Namespace): Expression.Var {
         val ident = parseName()
-        return Expression.Var(ident)
+        return Expression.Var(ident, namespace)
     }
 
     fun parseInt(): Expression.Literal {
@@ -231,8 +278,16 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
                 }
             }
             is Token.Lam -> parseLambda()
-            is Token.Ident -> parseVar()
-            is Token.UpperIdent -> parseDataConstruction()
+            is Token.Ident -> parseVar(Namespace.local)
+            is Token.UpperIdent -> {
+                //parseDataConstruction()
+                val (ns, trailing) = parseQualifier()
+
+                if (trailing == null)
+                    parseVar(ns)
+                else
+                    parseDataConstruction(ns, trailing)
+            }
             is Token.IntToken -> parseInt()
             is Token.BoolToken -> parseBool()
             is Token.StringToken -> parseString()
@@ -244,37 +299,55 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         }
     }
 
+    private fun parseQualifier(): Pair<Namespace, Name?> {
+        if (iterator.peek().value !is Token.UpperIdent)
+            return Namespace.local to null
+
+        val names = mutableListOf<Name>()
+        names += parseUpperName()
+
+        while (iterator.peek().value is Token.DoubleColon) {
+            iterator.next()
+
+            if (iterator.peek().value !is Token.UpperIdent)
+                return Namespace(names) to null
+
+            names += parseUpperName()
+        }
+
+        return Namespace(names.dropLast(1)) to names.last()
+    }
+
     // Color::Red()
-    private fun parseDataConstruction(): Expression.Construction {
-        val type = parseUpperName("expected type name")
-        expectNext<Token.DoubleColon>(expectedError("expected double colon"))
-        val dtor = parseUpperName("expected data constructor")
+    private fun parseDataConstruction(namespace: Namespace, dtor: Name): Expression.Construction {
         expectNext<Token.LParen>(expectedError("expected open paren"))
 
         val exprs = commaSeparated(::parseExpression) { it !is Token.RParen }
         val endPos = expectNext<Token.RParen>(expectedError("expected closing paren")).span.end
 
-        return Expression.Construction(type, dtor, exprs, Span(type.span.start, endPos))
+        return Expression.Construction(namespace, dtor, exprs, Span((namespace.span ?: dtor.span).start, endPos))
     }
 
     fun parseCase(): Expression.Case {
-        val typeName = parseUpperName("expected type name")
-        expectNext<Token.DoubleColon>(expectedError("expected double colon"))
-        val dtorName = parseUpperName("expected data constructor name")
+        val (ns, dtor) = parseQualifier() // List::List::Cons
+
+        if (dtor == null)
+            throw Exception("expected a qualified data constructor at ${ns.span}")
+
         expectNext<Token.LParen>(expectedError("expected left paren"))
         val binders = commaSeparated(::parseName) { it !is Token.RParen }
         expectNext<Token.RParen>(expectedError("expected right paren"))
         expectNext<Token.FatArrow>(expectedError("expected fat arrow"))
         val body = parseExpression()
 
-        return Expression.Case(typeName, dtorName, binders, body, Span(typeName.span.start, body.span.end))
+        return Expression.Case(ns, dtor, binders, body, Span((ns.span ?: dtor.span).start, body.span.end))
     }
 
     private fun parseLet(recursive: Boolean): Expression.Let {
         val (letSpan, _) = iterator.next()
         val binder = parseName()
-        var scheme:Scheme? = null
-        if(iterator.peek().value is Token.Colon){
+        var scheme: Scheme? = null
+        if (iterator.peek().value is Token.Colon) {
             iterator.next()
             scheme = parseScheme()
         }
@@ -283,7 +356,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         expectNext<Token.In>(expectedError("expected in"))
         val body = parseExpression()
 
-        return Expression.Let(recursive, binder,scheme, expr, body, Span(letSpan.start, body.span.end))
+        return Expression.Let(recursive, binder, scheme, expr, body, Span(letSpan.start, body.span.end))
     }
 
     private fun parseIf(): Expression.If { // if true then 3 else 4

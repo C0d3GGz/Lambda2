@@ -1,0 +1,86 @@
+module List
+
+import Option
+
+type T<a> {
+  Cons(a, T<a>),
+  Nil()
+}
+
+let head: forall a. T<a> -> Option::T<a> =
+  \xs. match xs {
+    T::Nil() => Option::T::None(),
+    T::Cons(h, _) => Option::T::Some(h),
+  };
+
+let cons: forall a. a -> T<a> -> T<a> =
+  \x. \xs. T::Cons(x, xs);
+
+let map : forall a b. (a -> b) -> T<a> -> T<b> =
+  letrec go = \f. \xs. match xs {
+    T::Nil() => T::Nil(),
+    T::Cons(h, t) => T::Cons(f h, go f t),
+  } in
+  go;
+
+let map_index: forall a b. (Int -> a -> b) -> T<a> -> T<b> =
+  letrec go = \i. \f. \xs. match xs {
+    T::Nil() => T::Nil(),
+    T::Cons(h, t) => T::Cons(f i h, go (add 1 i) f t),
+  } in
+  go 0;
+
+let foldl : forall a b. (a -> b -> a) -> a -> T<b> -> a =
+  letrec go = \f. \acc. \xs. match xs {
+    T::Nil() => acc,
+    T::Cons(h, t) => go f (f acc h) t
+  } in
+  go;
+
+let foldr : forall a b. (a -> b -> b) -> b -> T<a> -> b =
+  letrec go = \f. \acc. \xs. match xs {
+    T::Nil() => acc,
+    T::Cons(h, t) => f h (go f acc t)
+  } in
+  go;
+
+let to_string : forall a. (a -> String) -> T<a> -> String =
+  \format. \xs.
+    match xs {
+      T::Nil() => "[]",
+      T::Cons(h, t) =>
+        let els = foldl (\acc. \el. concat (concat acc ", ") (format el)) (format h) t in
+        concat "[ " (concat els " ]")
+    };
+
+let reverse : forall a. T<a> -> T<a> =
+  foldl (\xs. \x. T::Cons(x, xs)) T::Nil();
+
+let list_concat : forall a. T<a> -> T<a> -> T<a> =
+  \xs. \ys. foldr (\x. \acc. T::Cons(x, acc)) ys xs;
+
+let repeat: forall a. Int -> a -> T<a> =
+  \n. \a.
+    letrec go = \n.
+      if eq n 0 then
+        T::Nil()
+      else
+        T::Cons(a, go (sub n 1)) in
+    go n;
+
+let count: forall a. (a -> Bool) -> T<a> -> Int =
+  \p.
+    foldl (\acc. \a. if p a then add acc 1 else acc) 0;
+
+let modify_at: forall a. Int -> (a -> a) -> T<a> -> T<a> =
+  \x. \f.
+    map_index \i. \e. if eq i x then f e else e;
+
+let get_at: forall a. Int -> T<a> -> Option::T<a> =
+  letrec go =
+    \n. \xs.
+      match xs {
+        T::Nil() => Option::T::None(),
+        T::Cons(h, t) => if eq n 0 then Option::T::Some(h) else go (sub n 1) t
+      } in
+  go;

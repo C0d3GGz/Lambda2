@@ -1,7 +1,6 @@
 package lambda.syntax
 
 import lambda.*
-import kotlin.math.exp
 
 sealed class Lit {
     val span: Span
@@ -18,7 +17,7 @@ sealed class Lit {
 
 sealed class Expression {
     data class Literal(val lit: Lit) : Expression()
-    data class Var(val name: Name) : Expression()
+    data class Var(val name: Name, val namespace: Namespace = Namespace.local) : Expression()
     data class Lambda(val binder: Name, val body: Expression, val sp: Span) : Expression() {
         fun foldArguments(): Pair<List<Name>, Expression> =
             when (body) {
@@ -56,13 +55,13 @@ sealed class Expression {
         val sp: Span
     ) : Expression()
 
-    data class Construction(val type: Name, val dtor: Name, val exprs: List<Expression>, val sp: Span) :
+    data class Construction(val namespace: Namespace, val dtor: Name, val exprs: List<Expression>, val sp: Span) :
         Expression()
 
     data class Match(val expr: Expression, val cases: List<Case>, val sp: Span) : Expression()
 
     data class Case(
-        val type: Name,
+        val namespace: Namespace,
         val dtor: Name,
         val binders: List<Name>,
         val body: Expression,

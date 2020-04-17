@@ -1,27 +1,27 @@
 package lambda
 
+import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.persistentHashMapOf
 import lambda.syntax.Lit
 import lambda.syntax.Name
+import lambda.syntax.Namespace
 
-data class Context(val binders: HashMap<Name, RTExpression>, val parent: Context?) {
-    operator fun get(name: Name): RTExpression? =
-        binders[name] ?: parent?.get(name)
+inline class Context(val binders: PersistentMap<Namespaced, RTExpression>) {
+    operator fun get(name: Namespaced): RTExpression? = binders[name]
 
-    fun extend(binders: HashMap<Name, RTExpression>): Context = Context(binders, this)
-    fun extendSingle(name: Name, expr: RTExpression): Context = extend(hashMapOf(name to expr))
-    fun flatten(): HashMap<Name, RTExpression> =
-        (parent?.flatten() ?: hashMapOf()).apply { putAll(binders) }
-
-    fun toList(): List<Pair<Name, RTExpression>> = flatten().toList()
+    fun getLocal(name: String): RTExpression = get(Namespace.local to Name(name))!!
+    fun extend(binders: PersistentMap<Namespaced, RTExpression>): Context = Context(this.binders.putAll(binders))
+    fun extendLocal(name: Name, expr: RTExpression): Context = extend(persistentHashMapOf(Namespace.local to name to expr))
+    fun toList(): List<Pair<Namespaced, RTExpression>> = binders.toList()
 
     companion object {
-        fun empty() = Context(HashMap(), null)
+        fun empty() = Context(persistentHashMapOf())
     }
 }
 
 sealed class RTExpression {
     data class Literal(val lit: Lit) : RTExpression()
-    data class Var(val name: Name) : RTExpression()
+    data class Var(val namespace: Namespace, val name: Name) : RTExpression()
     data class Lambda(val binder: Name, val body: RTExpression) : RTExpression()
     data class Closure(val binder: Name, val body: RTExpression, var context: Context) : RTExpression()
     data class App(val func: RTExpression, val arg: RTExpression) : RTExpression()
@@ -65,49 +65,49 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 Name("#add") -> {
                     RTExpression.Literal(
                         Lit.Int(
-                            matchIntLiteral(ctx[Name("x")]!!)
-                                    + matchIntLiteral(ctx[Name("y")]!!)
+                            matchIntLiteral(ctx.getLocal("x"))
+                                    + matchIntLiteral(ctx.getLocal("y"))
                         )
                     )
                 }
                 Name("#sub") -> {
                     RTExpression.Literal(
                         Lit.Int(
-                            matchIntLiteral(ctx[Name("x")]!!)
-                                    - matchIntLiteral(ctx[Name("y")]!!)
+                            matchIntLiteral(ctx.getLocal("x"))
+                                    - matchIntLiteral(ctx.getLocal("y"))
                         )
                     )
                 }
                 Name("#eq") -> {
                     RTExpression.Literal(
                         Lit.Bool(
-                            matchIntLiteral(ctx[Name("x")]!!)
-                                    == matchIntLiteral(ctx[Name("y")]!!)
+                            matchIntLiteral(ctx.getLocal("x"))
+                                    == matchIntLiteral(ctx.getLocal("y"))
                         )
                     )
                 }
                 Name("#concat") -> {
                     RTExpression.Literal(
                         Lit.String(
-                            matchStringLiteral(ctx[Name("x")]!!)
-                                    + matchStringLiteral(ctx[Name("y")]!!)
+                            matchStringLiteral(ctx.getLocal("x"))
+                                    + matchStringLiteral(ctx.getLocal("y"))
                         )
                     )
                 }
                 Name("#int_to_string") -> {
                     RTExpression.Literal(
                         Lit.String(
-                            matchIntLiteral(ctx[Name("x")]!!).toString()
+                            matchIntLiteral(ctx.getLocal("x")).toString()
                         )
                     )
                 }
                 Name("#sleep") -> {
-                    val x = matchIntLiteral(ctx[Name("x")]!!)
+                    val x = matchIntLiteral(ctx.getLocal("x"))
                     Thread.sleep(x.toLong())
                     RTExpression.Pack(1, emptyList())
                 }
                 Name("#print") -> {
-                    val x = matchStringLiteral(ctx[Name("x")]!!)
+                    val x = matchStringLiteral(ctx.getLocal("x"))
                     println(x)
                     RTExpression.Pack(1, emptyList())
                 }
@@ -115,7 +115,8 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                     print("\u001b[H\u001b[2J")
                     RTExpression.Pack(1, emptyList())
                 }
-                else -> ctx[expr.name] ?: throw EvalException("${expr.name} was undefined.")
+                else -> ctx[expr.namespace to expr.name]
+                    ?: throw EvalException("${expr.namespace.asQualifier()}${expr.name} was undefined.")
             }
         }
         is RTExpression.Lambda -> RTExpression.Closure(expr.binder, expr.body, ctx)
@@ -124,7 +125,7 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
             when (val evaledClosure = eval(ctx, expr.func)) {
                 is RTExpression.Closure -> {
                     val evaledArg = eval(ctx, expr.arg)
-                    val tmpCtx = evaledClosure.context.extendSingle(evaledClosure.binder, evaledArg)
+                    val tmpCtx = evaledClosure.context.extendLocal(evaledClosure.binder, evaledArg)
                     eval(tmpCtx, evaledClosure.body)
                 }
                 else -> throw EvalException("$evaledClosure is not a function.")
@@ -148,50 +149,48 @@ fun eval(ctx: Context, expr: RTExpression): RTExpression {
                 ?: throw EvalException("tried to pattern match on a non-pack value")
             val case = expr.cases.firstOrNull { it.tag == evaledExpr.tag }
                 ?: throw EvalException("failed to match pattern with tag ${evaledExpr.tag}")
-            val binders: HashMap<Name, RTExpression> = HashMap()
-            case.binders.zip(evaledExpr.data).forEach { (n, e) ->
-                binders[n] = e
-            }
-            val tmpCtx = ctx.extend(binders)
+            val binders = case.binders
+                .zip(evaledExpr.data)
+                .fold(persistentHashMapOf<Namespaced, RTExpression>()) { acc, (n, e) ->
+                    acc.put(Namespace.local to n, e)
+                }
 
-            eval(tmpCtx, case.body)
+            eval(ctx.extend(binders), case.body)
         }
         is RTExpression.LetRec -> {
             val evaledExpr = eval(ctx, expr.expr)
 
             if (evaledExpr is RTExpression.Closure) {
-                evaledExpr.context = evaledExpr.context.extendSingle(expr.binder, evaledExpr)
+                evaledExpr.context = evaledExpr.context.extendLocal(expr.binder, evaledExpr)
             }
 
-            val bodyCtx = ctx.extendSingle(expr.binder, evaledExpr)
-            eval(bodyCtx, expr.body)
+            eval(ctx.extendLocal(expr.binder, evaledExpr), expr.body)
         }
     }
 }
 
-fun evalExprs(exprs: List<Pair<Name, RTExpression>>): RTExpression {
-    val ctx = initialContext()
-    var result: RTExpression = RTExpression.Var(Name("empty source file"))
+fun evalExprs(ctx: Context, namespace: Namespace, exprs: List<Pair<Name, RTExpression>>): Pair<Context, RTExpression> {
+    var result: RTExpression = RTExpression.Var(namespace, Name("empty source file"))
 
-    exprs.forEach {
-        result = eval(ctx, it.second)
-        ctx.binders[it.first] = result
+    val resCtx = exprs.fold(ctx) { acc, (name, expr) ->
+        result = eval(acc, expr)
+        acc.extend(persistentHashMapOf(namespace to name to result))
     }
 
-    return result
+    return resCtx to result
 }
 
 fun evalExpr(expr: RTExpression): RTExpression {
     return eval(initialContext(), expr)
 }
 
-private fun initialContext(): Context {
+fun initialContext(): Context {
     val primAdd: RTExpression =
         RTExpression.Closure(
             Name("x"),
             RTExpression.Lambda(
                 Name("y"),
-                RTExpression.Var(Name("#add"))
+                RTExpression.Var(Namespace.local, Name("#add"))
             ),
             Context.empty()
         )
@@ -201,7 +200,7 @@ private fun initialContext(): Context {
             Name("x"),
             RTExpression.Lambda(
                 Name("y"),
-                RTExpression.Var(Name("#sub"))
+                RTExpression.Var(Namespace.local, Name("#sub"))
             ),
             Context.empty()
         )
@@ -211,7 +210,7 @@ private fun initialContext(): Context {
             Name("x"),
             RTExpression.Lambda(
                 Name("y"),
-                RTExpression.Var(Name("#eq"))
+                RTExpression.Var(Namespace.local, Name("#eq"))
             ),
             Context.empty()
         )
@@ -220,7 +219,7 @@ private fun initialContext(): Context {
             Name("x"),
             RTExpression.Lambda(
                 Name("y"),
-                RTExpression.Var(Name("#concat"))
+                RTExpression.Var(Namespace.local, Name("#concat"))
             ),
             Context.empty()
         )
@@ -228,7 +227,7 @@ private fun initialContext(): Context {
     val primint_to_string: RTExpression =
         RTExpression.Closure(
             Name("x"),
-            RTExpression.Var(Name("#int_to_string")),
+            RTExpression.Var(Namespace.local, Name("#int_to_string")),
             Context.empty()
         )
 
@@ -237,15 +236,15 @@ private fun initialContext(): Context {
     val innerZ = RTExpression.Lambda(
         Name("x"),
         RTExpression.App(
-            RTExpression.Var(Name("f")),
+            RTExpression.Var(Namespace.local, Name("f")),
             RTExpression.Lambda(
                 Name("y"),
                 RTExpression.App(
                     RTExpression.App(
-                        RTExpression.Var(Name("x")),
-                        RTExpression.Var(Name("x"))
+                        RTExpression.Var(Namespace.local, Name("x")),
+                        RTExpression.Var(Namespace.local, Name("x"))
                     ),
-                    RTExpression.Var(Name("y"))
+                    RTExpression.Var(Namespace.local, Name("y"))
                 )
             )
         )
@@ -263,34 +262,37 @@ private fun initialContext(): Context {
 
     val primSleep = RTExpression.Closure(
         Name("x"),
-        RTExpression.Var(Name("#sleep")),
+        RTExpression.Var(Namespace.local, Name("#sleep")),
         Context.empty()
     )
 
     val primPrint = RTExpression.Closure(
         Name("x"),
-        RTExpression.Var(Name("#print")),
+        RTExpression.Var(Namespace.local, Name("#print")),
         Context.empty()
     )
 
     val primClear = RTExpression.Closure(
         Name("x"),
-        RTExpression.Var(Name("#clear")),
+        RTExpression.Var(Namespace.local, Name("#clear")),
         Context.empty()
     )
 
+    val primUnit = RTExpression.Pack(1, listOf())
+
     return Context(
-        hashMapOf(
-            Name("add") to primAdd,
-            Name("sub") to primSub,
-            Name("eq") to primEq,
-            Name("concat") to primConcat,
-            Name("int_to_string") to primint_to_string,
-            Name("fix") to z,
-            Name("sleep") to primSleep,
-            Name("print") to primPrint,
-            Name("clear") to primClear
-        ), null
+        persistentHashMapOf(
+            Namespace.prim to Name("add") to primAdd,
+            Namespace.prim to Name("sub") to primSub,
+            Namespace.prim to Name("eq") to primEq,
+            Namespace.prim to Name("concat") to primConcat,
+            Namespace.prim to Name("int_to_string") to primint_to_string,
+            Namespace.prim to Name("fix") to z,
+            Namespace.prim to Name("sleep") to primSleep,
+            Namespace.prim to Name("print") to primPrint,
+            Namespace.prim to Name("clear") to primClear,
+            Namespace.prim to Name("unit") to primUnit
+        )
     )
 }
 

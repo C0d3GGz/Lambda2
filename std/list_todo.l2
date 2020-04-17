@@ -1,0 +1,7 @@
+module List
+
+// TODO expands to List::List::List<a>
+type List<a> {
+  Cons(a, List::List<a>),
+  Nil()
+}

@@ -1,5 +1,6 @@
 package lambda.backend
 
+/*
 import asmble.ast.Node.*
 import asmble.ast.Node.Func
 import asmble.ast.Node.Global
@@ -518,4 +519,4 @@ class Codegen() {
             }))
         )
     }
-}
+}*/

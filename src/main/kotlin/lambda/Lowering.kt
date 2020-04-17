@@ -1,18 +1,15 @@
 package lambda
 
-import lambda.syntax.DataConstructor
-import lambda.syntax.Expression
-import lambda.syntax.Name
-import lambda.syntax.SourceFile
+import lambda.syntax.*
 
 class Lowering() {
 
-    private var table: Map<Name, List<DataConstructor>> = emptyMap()
+    private var interfaces: MutableList<Pair<Namespace, Interface>> = mutableListOf()
 
     private fun lowerExpr(expr: Expression): RTExpression {
         return when (expr) {
             is Expression.Literal -> RTExpression.Literal(expr.lit)
-            is Expression.Var -> RTExpression.Var(expr.name)
+            is Expression.Var -> RTExpression.Var(expr.namespace, expr.name)
             is Expression.Lambda -> RTExpression.Lambda(
                 expr.binder,
                 lowerExpr(expr.body)
@@ -40,7 +37,7 @@ class Lowering() {
                 lowerExpr(expr.elseBranch)
             )
             is Expression.Construction -> RTExpression.Pack(
-                tagForDtor(expr.type, expr.dtor),
+                tagForDtor(expr.namespace, expr.dtor),
                 expr.exprs.map(::lowerExpr)
             )
             is Expression.Match ->
@@ -50,16 +47,17 @@ class Lowering() {
 
     private fun lowerCase(case: Expression.Case): RTExpression.Case {
         val body = lowerExpr(case.body)
-        val tag = tagForDtor(case.type, case.dtor)
+        val tag = tagForDtor(case.namespace, case.dtor)
         return RTExpression.Case(tag, case.binders, body)
     }
 
-    private fun tagForDtor(type: Name, dtor: Name): Int = table.getValue(type).indexOfFirst { it.name == dtor } + 1
+    private fun tagForDtor(namespace: Namespace, dtor: Name): Int {
+        val (ns, type) = namespace.splitType()
+        return interfaces.first { it.first == ns }.second.types[type]!!.dtors.indexOfFirst { it.name == dtor } + 1
+    }
 
-    fun lowerSourceFile(sf: SourceFile): List<Pair<Name, RTExpression>> {
-        table = sf.typeDeclarations()
-            .map { type -> type.name to type.dataConstructors }
-            .toMap()
+    fun lowerSourceFile(sf: SourceFile, interfaces: MutableList<Pair<Namespace, Interface>>): List<Pair<Name, RTExpression>> {
+        this.interfaces = interfaces
 
         return sf.valueDeclarations().map { it.name to lowerExpr(it.expr) }
     }

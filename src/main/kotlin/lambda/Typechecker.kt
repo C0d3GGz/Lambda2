@@ -303,7 +303,7 @@ class Typechecker {
             }
             is Expression.Typed -> {
                 val tyExpr = infer(ctx, expr.expr)
-                if (!expr.type.freeVars().isEmpty) { // TODO check wellformedness
+                if (!expr.type.freeVars().isEmpty()) { // TODO check wellformedness
                     throw RuntimeException("not allowed")
                 }
 
@@ -414,20 +414,20 @@ class Typechecker {
         return typeInfo.typeArgs to dc.fields
     }
 
-    fun inferSourceFile(interfaces: List<Pair<Namespace, Interface>>, file: SourceFile): Interface {
-        fun ctxFromInterfaces(interfaces: List<Pair<Namespace, Interface>>): Pair<TCTypeContext, TCValueContext> {
-            val typeCtx0: TCTypeContext = persistentHashMapOf()
-            val valueCtx0: TCValueContext = persistentHashMapOf()
+    fun ctxFromInterfaces(interfaces: List<Pair<Namespace, Interface>>): Pair<TCTypeContext, TCValueContext> {
+        val typeCtx0: TCTypeContext = persistentHashMapOf()
+        val valueCtx0: TCValueContext = persistentHashMapOf()
 
-            val (typeCtx, valueCtx) = interfaces.fold(typeCtx0 to valueCtx0) { (typeCtx, valueCtx), (ns, i) ->
-                val newTypeCtx = typeCtx.putAll(i.types.map { (name, typeInfo) -> ((ns to name) to typeInfo) }.toMap())
-                val newValueCtx = valueCtx.putAll(i.values.map { (name, scheme) -> ((ns to name) to scheme) }.toMap())
-                newTypeCtx to newValueCtx
-            }
-
-            return typeCtx to valueCtx
+        val (typeCtx, valueCtx) = interfaces.fold(typeCtx0 to valueCtx0) { (typeCtx, valueCtx), (ns, i) ->
+            val newTypeCtx = typeCtx.putAll(i.types.map { (name, typeInfo) -> ((ns to name) to typeInfo) }.toMap())
+            val newValueCtx = valueCtx.putAll(i.values.map { (name, scheme) -> ((ns to name) to scheme) }.toMap())
+            newTypeCtx to newValueCtx
         }
 
+        return typeCtx to valueCtx
+    }
+
+    fun inferSourceFile(interfaces: List<Pair<Namespace, Interface>>, file: SourceFile): Interface {
         namespace = file.header.namespace
         var errored = false
 

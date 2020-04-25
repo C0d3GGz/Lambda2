@@ -1,7 +1,8 @@
 package lambda
 
-import io.vavr.collection.HashSet
-import io.vavr.kotlin.hashSet
+import kotlinx.collections.immutable.PersistentSet
+import kotlinx.collections.immutable.persistentHashSetOf
+import kotlinx.collections.immutable.persistentSetOf
 import lambda.syntax.Name
 import lambda.syntax.Namespace
 
@@ -30,22 +31,22 @@ sealed class Type {
 
     fun isError() = this is ErrorSentinel
 
-    fun freeVars(): HashSet<TyVar> {
+    fun freeVars(): PersistentSet<TyVar> {
         return when (this) {
-            is Constructor, ErrorSentinel -> hashSet()
-            is Var -> hashSet(v)
-            is Fun -> arg.freeVars().union(result.freeVars())
-            is Unknown -> hashSet()
+            is Constructor, ErrorSentinel -> persistentSetOf()
+            is Var -> persistentSetOf(v)
+            is Fun -> arg.freeVars().addAll(result.freeVars())
+            is Unknown -> persistentSetOf()
         }
     }
 
-    fun unknowns(): HashSet<Int> {
+    fun unknowns(): PersistentSet<Int> {
         return when (this) {
-            is ErrorSentinel -> hashSet()
-            is Constructor -> tyArgs.fold(hashSet(), { acc, arg -> acc.union(arg.unknowns()) })
-            is Var -> hashSet()
-            is Fun -> arg.unknowns().union(result.unknowns())
-            is Unknown -> hashSet(u)
+            is ErrorSentinel -> persistentSetOf()
+            is Constructor -> tyArgs.fold(persistentSetOf(), { acc, arg -> acc.addAll(arg.unknowns()) })
+            is Var -> persistentSetOf()
+            is Fun -> arg.unknowns().addAll(result.unknowns())
+            is Unknown -> persistentSetOf(u)
         }
     }
 
@@ -72,8 +73,8 @@ sealed class Type {
 
 data class Scheme(val vars: List<TyVar>, val ty: Type) {
     val span: Span get() = Span(vars.firstOrNull()?.name?.span?.start ?: ty.span.start, ty.span.end)
-    fun freeVars(): HashSet<TyVar> = ty.freeVars().removeAll(vars)
-    fun unknowns(): HashSet<Int> = ty.unknowns()
+    fun freeVars(): PersistentSet<TyVar> = ty.freeVars().removeAll(vars)
+    fun unknowns(): PersistentSet<Int> = ty.unknowns()
 
     companion object {
         fun fromType(type: Type): Scheme = Scheme(emptyList(), type)

@@ -429,7 +429,7 @@ class Typechecker {
 
     fun inferSourceFile(interfaces: List<Pair<Namespace, Interface>>, file: SourceFile): Interface {
         namespace = file.header.namespace
-        var errored = false
+        val errors = mutableListOf<String>()
 
         val (typeCtx0, valueCtx0) = ctxFromInterfaces(listOf(primInterface) + interfaces)
         val typeCtx = file.typeDeclarations().fold(typeCtx0) { acc, decl ->
@@ -457,15 +457,17 @@ class Typechecker {
 
                 ctx.put(namespace to it.name, it.scheme)
             } catch (err: TypeError) {
-                errored = true
                 if (err !is TypeError.Followup) {
-                    println("error ${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}")
+                    errors += "Error when checking $namespace::${it.name}:\n${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}"
                 }
                 ctx.put(namespace to it.name, Scheme.fromType(Type.ErrorSentinel))
             }
         }
 
-        if (errored) throw Exception("Type errors occurred")
+        if (errors.isNotEmpty()) {
+            errors.forEach(::println)
+            throw Exception("Type errors occurred")
+        }
 
         return Interface(
             HashMap(typeCtx.mapNotNull { if (it.key.first == namespace) it.key.second to it.value else null }.toMap()),

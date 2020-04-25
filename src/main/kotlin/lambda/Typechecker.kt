@@ -458,7 +458,7 @@ class Typechecker {
                 ctx.put(namespace to it.name, it.scheme)
             } catch (err: TypeError) {
                 if (err !is TypeError.Followup) {
-                    errors += "Error when checking $namespace::${it.name}:\n${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}"
+                    errors += "Error when checking $namespace::${it.name}\n${if (err.span == Span.DUMMY) "" else err.span.toString()}: ${err.pretty()}"
                 }
                 ctx.put(namespace to it.name, Scheme.fromType(Type.ErrorSentinel))
             }

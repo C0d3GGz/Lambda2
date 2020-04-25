@@ -15,8 +15,8 @@ sealed class Token {
     object RParen : Token()
     object LBrace : Token()
     object RBrace : Token()
-    object LAngle: Token()
-    object RAngle: Token()
+    object LAngle : Token()
+    object RAngle : Token()
     object Lam : Token()
     object Dot : Token()
     object Comma : Token()
@@ -41,9 +41,9 @@ sealed class Token {
     object Then : Token()
     object Else : Token()
     object Match : Token()
-    object Module: Token()
-    object Import: Token()
-    object As: Token()
+    object Module : Token()
+    object Import : Token()
+    object As : Token()
 }
 
 data class Position(val line: Int, val column: Int) {
@@ -142,6 +142,7 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
         }
         return IntToken(result.toInt()) to result.length
     }
+
     private fun stringLiteral(): Pair<Token, Int> {
         var result = ""
         while (iterator.hasNext() && iterator.peek() != '"') {
@@ -151,9 +152,26 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
         return StringToken(result) to result.length + 2
     }
 
-    private fun consumeWhitespace() {
+    private tailrec fun consumeWhitespace() {
         while (iterator.hasNext() && iterator.peek().isWhitespace())
             iterator.next()
+
+        if (consumeComment() != null) consumeWhitespace()
+    }
+
+    private fun consumeComment(): String? {
+        var comment: String? = null
+        if (iterator.hasNext() && iterator.peek() == '/') {
+            iterator.next()
+            if (iterator.next() != '/') {
+                throw Exception("unclosed comment at ${iterator.position}")
+            }
+            comment = "//"
+            while (iterator.hasNext() && iterator.peek() != '\n') {
+                comment += iterator.next()
+            }
+        }
+        return comment
     }
 
     private fun ident(startChar: Char): Pair<Token, Int> {

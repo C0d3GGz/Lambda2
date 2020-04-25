@@ -3,6 +3,7 @@ module GameOfLife
 import List
 import Option
 
+//
 let identity: forall a. a -> a = \a. a;
 
 let const: forall a b. a -> b -> a = \a. \b. a;
@@ -82,3 +83,4 @@ let main: Unit =
 
   game_loop new_world 10;
 
+// end of file

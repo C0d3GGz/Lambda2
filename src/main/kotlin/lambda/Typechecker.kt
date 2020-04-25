@@ -124,7 +124,7 @@ data class Substitution(val subst: HashMap<Int, Type>) {
     fun apply(expr: Expression): Expression {
         return when (expr) {
             is Expression.Literal, is Expression.Var -> expr
-            is Expression.Lambda -> Expression.Lambda(expr.binder, apply(expr.body), expr.sp)
+            is Expression.Lambda -> Expression.Lambda(expr.binders, apply(expr.body), expr.sp)
             is Expression.App -> Expression.App(apply(expr.func), apply(expr.arg), expr.sp)
             is Expression.Typed -> apply(expr)
             is Expression.Let -> Expression.Let(
@@ -274,15 +274,20 @@ class Typechecker {
                 tyWrap(expr, t)
             }
             is Expression.Lambda -> {
-                val tyBinder = freshUnknown()
-
-                val body = withSpannedError(expr.body.span) {
-                    this.infer(ctx.put(Namespace.local to expr.binder, Scheme.fromType(tyBinder)), expr.body)
+                val tyBinders: List<Pair<Namespaced, Type>> = expr.binders.map {
+                    (Namespace.local to it) to freshUnknown()
                 }
 
+                val body = withSpannedError(expr.body.span) {
+                    this.infer(ctx.putAll(tyBinders.map { (namespaced, type) ->
+                        namespaced to Scheme.fromType(type)
+                    }.toMap()), expr.body)
+                }
                 tyWrap(
-                    Expression.Lambda(expr.binder, body, span),
-                    Type.Fun(tyBinder, body.type)
+                    Expression.Lambda(expr.binders, body, span),
+                    tyBinders.foldRight(body.type) { type, acc ->
+                        Type.Fun(type.second, acc)
+                    }
                 )
             }
             is Expression.Var -> {

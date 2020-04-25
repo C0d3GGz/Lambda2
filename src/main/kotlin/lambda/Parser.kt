@@ -231,13 +231,17 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
 
     fun parseLambda(): Expression.Lambda {
         val (start, _) = iterator.next()
+        val binders = mutableListOf<Name>()
+        binders += parseName()
 
-        val binder = parseName()
+        while (iterator.peek().value is Token.Ident) {
+            binders += parseName()
+        }
         expectNext<Token.Dot>(expectedError("expected dot"))
 
         val body = parseExpression()
 
-        return Expression.Lambda(binder, body, Span(start.start, body.span.end))
+        return Expression.Lambda(binders, body, Span(start.start, body.span.end))
     }
 
 

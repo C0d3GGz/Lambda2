@@ -10,10 +10,9 @@ class Lowering() {
         return when (expr) {
             is Expression.Literal -> RTExpression.Literal(expr.lit)
             is Expression.Var -> RTExpression.Var(expr.namespace, expr.name)
-            is Expression.Lambda -> RTExpression.Lambda(
-                expr.binder,
-                lowerExpr(expr.body)
-            )
+            is Expression.Lambda -> expr.binders.foldRight(lowerExpr(expr.body)) { binder, acc ->
+                RTExpression.Lambda(binder, acc)
+            }
             is Expression.App -> RTExpression.App(
                 lowerExpr(expr.func),
                 lowerExpr(expr.arg)
@@ -56,7 +55,10 @@ class Lowering() {
         return interfaces.first { it.first == ns }.second.types[type]!!.dtors.indexOfFirst { it.name == dtor } + 1
     }
 
-    fun lowerSourceFile(sf: SourceFile, interfaces: MutableList<Pair<Namespace, Interface>>): List<Pair<Name, RTExpression>> {
+    fun lowerSourceFile(
+        sf: SourceFile,
+        interfaces: MutableList<Pair<Namespace, Interface>>
+    ): List<Pair<Name, RTExpression>> {
         this.interfaces = interfaces
 
         return sf.valueDeclarations().map { it.name to lowerExpr(it.expr) }

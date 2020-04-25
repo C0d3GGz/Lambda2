@@ -2,6 +2,7 @@ package lambda.renamer
 
 import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.persistentHashMapOf
+import kotlinx.collections.immutable.putAll
 import lambda.*
 import lambda.syntax.*
 
@@ -11,6 +12,9 @@ typealias Values = PersistentMap<Name, Namespace>
 
 data class Context(val currentNamespace: Namespace, val aliases: Aliases, val types: Types, val values: Values) {
     fun extendValues(name: Name, namespace: Namespace): Context = copy(values = values.put(name, namespace))
+    fun extendValues(names: Collection<Name>, namespace: Namespace): Context = copy(values = values.putAll(names.map {
+        it to namespace
+    }.asIterable()))
     fun extendTypes(name: Name, namespace: Namespace): Context = copy(types = types.put(name, namespace))
     fun extendAliases(alias: Namespace, namespace: Namespace): Context = copy(aliases = aliases.put(alias, namespace))
 }
@@ -108,7 +112,7 @@ private fun renameExpr(ctx: Context, expr: Expression): Expression {
             )
         }
         is Expression.Lambda -> expr.copy(
-            body = renameExpr(ctx.extendValues(expr.binder, Namespace.local), expr.body)
+            body = renameExpr(ctx.extendValues(expr.binders, Namespace.local), expr.body)
         )
         is Expression.Var -> expr.copy(
             namespace = if (expr.namespace.isLocal())

@@ -6,7 +6,7 @@ type T<a> {
 }
 
 let flat_map: forall a b. (a -> T<b>) -> T<a> -> T<b> =
-  \f. \o.
+  \f o.
     match o {
       T::Some(a) => f a,
       T::None() => T::None()
@@ -16,7 +16,7 @@ let map: forall a b. (a -> b) -> T<a> -> T<b> =
   \f. flat_map \a. T::Some(f a);
 
 let get_or_else: forall a. a -> T<a> -> a =
-  \default. \o.
+  \default o.
     match o {
       T::Some(a) => a,
       T::None() => default

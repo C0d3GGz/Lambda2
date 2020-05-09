@@ -208,9 +208,14 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
         return Name(ident.ident, span)
     }
 
-    fun parseVar(namespace: Namespace): Expression.Var {
+    fun parseVar(namespace: Namespace): Expression {
         val ident = parseName()
         return Expression.Var(ident, namespace)
+    }
+
+    fun parseHole(): Expression {
+        val (span, token) = expectNext<Token.HoleIdent>(expectedError("hole"))
+        return Expression.Hole(Name(token.ident, span))
     }
 
     fun parseInt(): Expression.Literal {
@@ -283,6 +288,7 @@ class Parser(tokens: Iterator<Spanned<Token>>) {
             }
             is Token.Lam -> parseLambda()
             is Token.Ident -> parseVar(Namespace.local)
+            is Token.HoleIdent -> parseHole()
             is Token.UpperIdent -> {
                 //parseDataConstruction()
                 val (ns, trailing) = parseQualifier()

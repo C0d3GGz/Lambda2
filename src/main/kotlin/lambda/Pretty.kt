@@ -18,6 +18,7 @@ private object Pretty {
         return when (expr) {
             is Expression.Literal -> prettyPrintLiteral(expr.lit)
             is Expression.Var -> "${expr.namespace.asQualifier()}${expr.name}"
+            is Expression.Hole -> expr.name.toString()
             is Expression.Lambda -> "(\\${expr.binders.joinToString(" ")}. ${prettyPrintExpr(expr.body, 0)})"
             is Expression.App -> {
                 val output = "${prettyPrintExpr(expr.func, depth)} ${prettyPrintExpr(expr.arg, depth + 1)}"

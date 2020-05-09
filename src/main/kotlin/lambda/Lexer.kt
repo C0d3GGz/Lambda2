@@ -26,6 +26,7 @@ sealed class Token {
     object Equals : Token()
     object Arrow : Token()
     object FatArrow : Token()
+    data class HoleIdent(val ident: String) : Token()
     data class Ident(val ident: String) : Token()
     data class UpperIdent(val ident: String) : Token()
     data class IntToken(val int: Int) : Token()
@@ -106,6 +107,10 @@ class Lexer(input: String) : Iterator<Spanned<Token>> {
             '.' -> Dot to 1
             ';' -> Semicolon to 1
             ',' -> Comma to 1
+            '?' -> {
+                val (ident, len) = ident('?')
+                HoleIdent((ident as Ident).ident) to len
+            }
             ':' -> {
                 if (iterator.peek() == ':') {
                     iterator.next()

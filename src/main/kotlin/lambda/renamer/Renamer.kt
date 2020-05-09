@@ -90,7 +90,7 @@ private fun renameScheme(ctx: Context, scheme: Scheme): Scheme {
 
 private fun renameExpr(ctx: Context, expr: Expression): Expression {
     return when (expr) {
-        is Expression.Literal -> expr
+        is Expression.Literal, is Expression.Hole -> expr
         is Expression.App -> expr.copy(func = renameExpr(ctx, expr.func), arg = renameExpr(ctx, expr.arg))
         is Expression.Typed -> expr.copy(expr = renameExpr(ctx, expr.expr), type = renameType(ctx, expr.type))
         is Expression.Construction -> expr.copy(

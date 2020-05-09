@@ -9,6 +9,7 @@ class Lowering() {
     private fun lowerExpr(expr: Expression): RTExpression {
         return when (expr) {
             is Expression.Literal -> RTExpression.Literal(expr.lit)
+            is Expression.Hole -> throw Exception("Holes shouldn't reach lowerExpr")
             is Expression.Var -> RTExpression.Var(expr.namespace, expr.name)
             is Expression.Lambda -> expr.binders.foldRight(lowerExpr(expr.body)) { binder, acc ->
                 RTExpression.Lambda(binder, acc)

@@ -123,7 +123,7 @@ data class Substitution(val subst: HashMap<Int, Type>) {
 
     fun apply(expr: Expression): Expression {
         return when (expr) {
-            is Expression.Literal, is Expression.Var -> expr
+            is Expression.Literal, is Expression.Var, is Expression.Hole -> expr
             is Expression.Lambda -> Expression.Lambda(expr.binders, apply(expr.body), expr.sp)
             is Expression.App -> Expression.App(apply(expr.func), apply(expr.arg), expr.sp)
             is Expression.Typed -> apply(expr)
@@ -163,10 +163,11 @@ sealed class TypeError : Exception() {
 
     data class Unification(val ty1: Type, val ty2: Type, val stack: MutableList<Pair<Type, Type>>) : TypeError()
     data class UnknownVar(val name: Namespaced, override var span: Span?) : TypeError()
-    data class UnknownType(val name: Namespaced) : TypeError()
+    data class UnknownType(val name: Namespaced, override var span: Span?) : TypeError()
     data class UnknownDtor(val name: Namespaced) : TypeError()
     data class OccursCheck(val u: Int, val type: Type) : TypeError()
     data class IfCondition(val type: Type, override var span: Span?) : TypeError()
+    data class HoleError(override var span: Span?) : TypeError()
     object Followup : TypeError()
 
     fun pretty(): String = when (this) {
@@ -178,21 +179,26 @@ sealed class TypeError : Exception() {
         is UnknownDtor -> "Type ${name.first} does not have a constructor named ${name.second}"
         is OccursCheck -> "Failed to infer the infinite type u$u ~ ${type.pretty()}"
         is IfCondition -> "Condition should be of type Bool but was ${type.pretty()}"
+        is HoleError -> "Found typed holes"
         is Followup -> "Followup error, you shouldn't be seeing this"
     }
 
     override fun toString(): String = this.pretty()
 }
 
+data class HoleError(val name: Name, val type: Type.Unknown, val ctx: TCValueContext)
+
 class Typechecker {
 
     private var fresh: Int = 0
 
-    private val substitution: Substitution = Substitution.empty
+    private var substitution: Substitution = Substitution.empty
 
     private var typeCtx: TCTypeContext = persistentHashMapOf()
 
     private var namespace = Namespace.local
+
+    private val holes: MutableList<HoleError> = mutableListOf()
 
     fun freshUnknown(): Type.Unknown = Type.Unknown(++fresh)
 
@@ -231,6 +237,7 @@ class Typechecker {
     }
 
     private fun zonk(type: Type): Type = substitution.apply(type)
+    private fun zonk(scheme: Scheme): Scheme = substitution.apply(scheme)
 
     private fun zonk(type: Expression.Typed): Expression.Typed = substitution.apply(type)
 
@@ -253,6 +260,7 @@ class Typechecker {
     fun reset() {
         fresh = 0
         substitution.subst.clear()
+        holes.clear()
     }
 
     fun subsumes(lhs: Scheme, rhs: Scheme) {
@@ -297,6 +305,11 @@ class Typechecker {
                 // If we try to look up a value that failed to type check before we immediately bail out
                 if (scheme.ty is Type.ErrorSentinel) throw TypeError.Followup
                 tyWrap(expr, instantiate(scheme))
+            }
+            is Expression.Hole -> {
+                val tyHole = freshUnknown()
+                holes += HoleError(expr.name, tyHole, ctx)
+                tyWrap(expr, tyHole)
             }
             is Expression.App -> {
                 val tyRes = freshUnknown()
@@ -414,7 +427,9 @@ class Typechecker {
 
     private fun lookupDtor(ns: Namespace, dtor: Name): Pair<List<TyVar>, List<Type>> {
         val nsType = ns.splitType()
-        val typeInfo = typeCtx[nsType] ?: throw TypeError.UnknownType(nsType)
+        val typeInfo = typeCtx[nsType] ?: throw TypeError.UnknownType(
+            nsType,
+            ns.span?.start?.let { Span(it, dtor.span.end) } ?: dtor.span)
         val dc = typeInfo.dtors.find { it.name == dtor } ?: throw TypeError.UnknownDtor(ns to dtor)
         return typeInfo.typeArgs to dc.fields
     }
@@ -458,6 +473,27 @@ class Typechecker {
 
                 withSpannedError(it.span) {
                     subsumes(scheme, it.scheme)
+                }
+
+                if (holes.isNotEmpty()) {
+                    holes.forEach { error ->
+                        println("Found hole ${error.name} with type ${zonk(error.type).pretty()}")
+
+                        error.ctx.forEach { (namespaced, value) ->
+                            if (namespaced.first.isLocal()) {
+                                println("${namespaced.second} : ${zonk(value).pretty()}")
+                            }
+                            val oldSubst = substitution.copy()
+                            try {
+                                subsumes(value, Scheme.fromType(error.type))
+                                println("Possible hole fit: ${namespaced.first.asQualifier()}${namespaced.second} : ${zonk(value).pretty()}")
+                            } catch (err: TypeError) {
+                            }
+                            substitution = oldSubst
+                        }
+                    }
+
+                    throw TypeError.HoleError(holes[0].name.span)
                 }
 
                 ctx.put(namespace to it.name, it.scheme)

@@ -18,6 +18,7 @@ sealed class Lit {
 sealed class Expression {
     data class Literal(val lit: Lit) : Expression()
     data class Var(val name: Name, val namespace: Namespace = Namespace.local) : Expression()
+    data class Hole(val name: Name) : Expression()
     data class Lambda(val binders: List<Name>, val body: Expression, val sp: Span) : Expression() {
         fun foldArguments(): Pair<List<Name>, Expression> =
             when (body) {
@@ -82,6 +83,7 @@ sealed class Expression {
         get() = when (this) {
             is Literal -> lit.span
             is Var -> name.span
+            is Hole -> name.span
             is Lambda -> sp
             is App -> sp
             is Typed -> sp
@@ -95,7 +97,7 @@ sealed class Expression {
 
     fun freeVars(): HashSet<Name> {
         return when (this) {
-            is Literal -> hashSetOf()
+            is Literal, is Hole -> hashSetOf()
             is Var -> hashSetOf(name)
             is Lambda -> body.freeVars().also { it.removeAll(binders) }
             is App -> func.freeVars().also { it.addAll(arg.freeVars()) }
@@ -133,7 +135,7 @@ sealed class Expression {
     fun subst(name: Name, replacement: Expression): Expression {
         // TODO: handle name capture
         return when (this) {
-            is Literal -> this
+            is Literal, is Hole -> this
             is Var -> if (this.name == name) replacement else this
             is Lambda -> substLam(name, replacement)
             is App -> copy(arg = arg.subst(name, replacement), func = func.subst(name, replacement))
